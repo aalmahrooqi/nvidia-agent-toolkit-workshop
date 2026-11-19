@@ -77,6 +77,14 @@ sandbox already exist, it only re-verifies.
 uv run jupyter lab tracks/01-concepts-architecture/01_concepts.ipynb
 ```
 
+### Deploy as a Brev Launchable
+
+To hand learners a one-click environment instead, publish the course as a
+[Brev Launchable](https://docs.nvidia.com/brev/concepts/launchables).
+[`launchable/README.md`](launchable/README.md) lists the builder settings, and
+[`launchable/bootstrap.sh`](launchable/bootstrap.sh) is the setup script it runs: it installs the
+prerequisites a fresh Brev VM lacks, calls `setup.sh`, and starts JupyterLab.
+
 ## What Changed From the Full Course
 
 | Distilled notebook | Source in `claw-training-assets` |
@@ -101,6 +109,7 @@ Two things differ in substance, not just in packaging:
 ```
 claw-training-distilled/
 ├── setup.sh                 # Run first: install, onboard, first inference
+├── launchable/              # Brev Launchable setup script and builder settings
 ├── tracks/                  # Course content (7 notebooks)
 │   ├── 01-concepts-architecture/
 │   ├── 02-openshell-runtime/
@@ -135,9 +144,9 @@ Notebook conventions are in [`docs/STYLE_GUIDE.md`](docs/STYLE_GUIDE.md). Start 
 
 ## Verification Status
 
-The notebooks and `setup.sh` pass the static checks above. The two merged notebooks and `setup.sh`
-have not yet been executed end to end against a live sandbox; run the course once on a target host
-before delivering it.
+The notebooks and `setup.sh` pass the static checks above. The two merged notebooks, `setup.sh`,
+and `launchable/bootstrap.sh` have not yet been executed end to end against a live sandbox; run
+the course once on a target host, and do one test Launchable deploy, before delivering it.
 
 ## License
 

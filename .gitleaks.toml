@@ -1,0 +1,19 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "nvidia-api-key"
+description = "NVIDIA API key"
+regex = '''nvapi-[A-Za-z0-9_-]{16,}'''
+keywords = ["nvapi-"]
+
+  [[rules.allowlists]]
+  description = "Literal redaction marker"
+  regexTarget = "match"
+  regexes = ['''^nvapi-REDACTED$''']
+
+[[rules]]
+id = "openclaw-dashboard-token"
+description = "OpenClaw dashboard URL containing a raw 64-hex gateway token"
+regex = '''#token=[a-fA-F0-9]{64}'''
+keywords = ["#token="]

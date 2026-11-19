@@ -1,6 +1,8 @@
 """Structural checks for the distilled course as a whole."""
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import nbformat
@@ -94,6 +96,22 @@ def test_policy_files_match_the_notebook_that_writes_them():
     for relative, body in written.items():
         assert (notebook_dir / relative).read_text(encoding="utf-8") == body
         yaml.safe_load(body)
+
+
+@pytest.mark.parametrize("script", ["setup.sh", "launchable/bootstrap.sh"])
+def test_shell_script_parses_and_is_executable(script):
+    path = REPO_ROOT / script
+    assert os.access(path, os.X_OK), f"{script} is not executable"
+    result = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_bootstrap_keeps_the_api_key_out_of_jupyter_and_off_disk():
+    script = (REPO_ROOT / "launchable" / "bootstrap.sh").read_text(encoding="utf-8")
+    assert "env -u NVIDIA_API_KEY setsid nohup uv run jupyter lab" in script
+    assert ".env" not in script
+    # A non-loopback bind without a token must be refused, not started.
+    assert "set CLAW_JUPYTER_TOKEN before exposing JupyterLab" in script
 
 
 def test_setup_script_reads_pins_that_exist():

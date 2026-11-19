@@ -1,0 +1,45 @@
+# Pre-commit hooks for claw-training-distilled
+# All hooks block on failure (D-29)
+repos:
+  # Hook 1: ruff lint + format on .py files
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.21
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Hook 2: trailing whitespace + EOF fix
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+  # Hook 3: check_notebooks.py on .ipynb files
+  # Hook 4: check-markdown-spdx runs the same script on .md files under tracks/
+  # Hook 5: validate_manifests.py on alpha YAML files and manifests only
+  - repo: local
+    hooks:
+      - id: check-notebooks
+        name: Check notebook structure
+        entry: python scripts/check_notebooks.py
+        language: python
+        types: [jupyter]
+        additional_dependencies:
+          [colorama, "nbformat>=5.9,<6", "ipython>=9,<10"]
+
+      - id: check-markdown-spdx
+        name: Check tracks/ markdown SPDX headers
+        entry: python scripts/check_notebooks.py
+        language: python
+        files: '^tracks/.*\.md$'
+        additional_dependencies:
+          [colorama, "nbformat>=5.9,<6", "ipython>=9,<10"]
+
+      - id: validate-manifests
+        name: Validate manifests and alpha files
+        entry: uv run python scripts/validate_manifests.py
+        language: system
+        files: '(^versions\.yaml$|^feature_status\.yaml$|^manifests/.*\.ya?ml$)'
+        pass_filenames: false
