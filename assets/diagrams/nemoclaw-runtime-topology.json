@@ -1,0 +1,278 @@
+{
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "title": "NemoClaw Managed Runtime Topology",
+    "subtitle": "NemoClaw v0.0.79 + OpenShell 0.0.72 — Docker-driver deployment",
+    "titleAlign": "center"
+  },
+  "panels": [
+    {
+      "id": "host",
+      "label": "TRUSTED HOST",
+      "subtitle": "Operator control plane, OpenShell gateway, and Docker Engine",
+      "x": 70,
+      "y": 155,
+      "w": 1390,
+      "h": 835,
+      "rx": 20,
+      "stroke": "#444444",
+      "strokeWidth": 2
+    },
+    {
+      "id": "docker",
+      "label": "DOCKER ENGINE — DEFAULT OPENSHELL DRIVER",
+      "subtitle": "Each agent is a separate sandbox container; managed vLLM runs host-side",
+      "x": 700,
+      "y": 245,
+      "w": 700,
+      "h": 665,
+      "rx": 18,
+      "stroke": "#76B900",
+      "strokeWidth": 2,
+      "fill": "#FBFFF6",
+      "titleColor": "green"
+    },
+    {
+      "id": "external",
+      "label": "PROVIDERS & TOOLS",
+      "subtitle": "Only allowlisted, gateway-mediated traffic leaves the host",
+      "x": 1510,
+      "y": 245,
+      "w": 340,
+      "h": 665,
+      "rx": 18,
+      "stroke": "#8A8F98",
+      "dashed": true
+    }
+  ],
+  "nodes": [
+    {
+      "id": "operator",
+      "kind": "tile",
+      "label": "Operator",
+      "detail": "Trusted host user",
+      "icon": "marketing:person-user",
+      "frame": "circle",
+      "fill": "#1D9BD7",
+      "iconColor": "#FFFFFF",
+      "x": 115,
+      "y": 305,
+      "w": 150,
+      "h": 170
+    },
+    {
+      "id": "nemoclaw",
+      "kind": "card",
+      "label": "NVIDIA NemoClaw",
+      "icon": "marketing:nemo-service",
+      "iconColor": "#76B900",
+      "stroke": "#76B900",
+      "fill": "#FFFFFF",
+      "x": 335,
+      "y": 235,
+      "w": 300,
+      "h": 290,
+      "items": [
+        "onboard / connect",
+        "policy / shields",
+        "snapshot / rebuild"
+      ],
+      "detail": "Owns the managed compatibility unit"
+    },
+    {
+      "id": "gateway",
+      "kind": "card",
+      "label": "OpenShell Gateway",
+      "icon": "marketing:networking-security-firewall",
+      "iconColor": "#76B900",
+      "stroke": "#76B900",
+      "fill": "#FFFFFF",
+      "x": 335,
+      "y": 545,
+      "w": 300,
+      "h": 305,
+      "items": [
+        {"icon": "gui:line:shield", "label": "Policy enforcement"},
+        {"icon": "elements:key", "label": "Credential custody"},
+        {"icon": "gui:line:route", "label": "Inference routing"}
+      ],
+      "detail": "Keys remain outside agent sandboxes"
+    },
+    {
+      "id": "openclaw",
+      "kind": "card",
+      "label": "OpenClaw",
+      "icon": "marketing:generative-and-agentic-ai",
+      "stroke": "#76B900",
+      "fill": "#FFFFFF",
+      "x": 750,
+      "y": 335,
+      "w": 200,
+      "h": 335,
+      "items": ["Landlock", "Seccomp", "network policy"],
+      "detail": "Managed 2026.6.10 • no provider keys"
+    },
+    {
+      "id": "hermes",
+      "kind": "card",
+      "label": "Hermes Agent",
+      "icon": "marketing:gen-ai",
+      "stroke": "#76B900",
+      "fill": "#FFFFFF",
+      "x": 975,
+      "y": 335,
+      "w": 200,
+      "h": 335,
+      "items": ["Landlock", "Seccomp", "network policy"],
+      "detail": "Managed 0.17.0 • no provider keys"
+    },
+    {
+      "id": "dcode",
+      "kind": "card",
+      "label": "Deep Agents Code",
+      "icon": "marketing:building-agentic-ai-application-with-large-language-model",
+      "stroke": "#76B900",
+      "fill": "#FFFFFF",
+      "x": 1175,
+      "y": 335,
+      "w": 200,
+      "h": 355,
+      "items": ["Landlock", "Seccomp", "network policy"],
+      "detail": "0.1.34 • no provider keys"
+    },
+    {
+      "id": "vllm",
+      "kind": "card",
+      "label": "Managed vLLM",
+      "icon": "marketing:gpu-chip-text",
+      "stroke": "#76B900",
+      "fill": "#FFFFFF",
+      "x": 880,
+      "y": 685,
+      "w": 280,
+      "h": 225,
+      "items": ["DGX Spark • validated recipe"],
+      "detail": "Host-side inference.local provider"
+    },
+    {
+      "id": "docker-note",
+      "kind": "metric",
+      "value": "Docker containers",
+      "label": "Default v0.0.79 topology — no embedded K3s",
+      "detail": "Kubernetes is a separate experimental deployment path",
+      "color": "#76B900",
+      "x": 115,
+      "y": 850,
+      "w": 520,
+      "h": 130
+    },
+    {
+      "id": "nvidia-cloud",
+      "kind": "tile",
+      "label": "NVIDIA Cloud Models",
+      "detail": "NVIDIA API • NIM endpoints",
+      "icon": "marketing:cloud-ai",
+      "frame": "hex",
+      "fill": "#76B900",
+      "iconColor": "#FFFFFF",
+      "x": 1585,
+      "y": 340,
+      "w": 190,
+      "h": 245
+    },
+    {
+      "id": "tools",
+      "kind": "tile",
+      "label": "Allowlisted Tools",
+      "detail": ["APIs • MCP • package registries", "Explicit network policy"],
+      "icon": "marketing:tools-settings",
+      "frame": "square",
+      "fill": "#F8B000",
+      "iconColor": "#FFFFFF",
+      "x": 1585,
+      "y": 650,
+      "w": 190,
+      "h": 240
+    }
+  ],
+  "edges": [
+    {
+      "from": "operator",
+      "to": "nemoclaw",
+      "fromAnchor": "e",
+      "toAnchor": "w",
+      "color": "#444444",
+      "label": "CLI",
+      "labelY": 315
+    },
+    {
+      "from": "nemoclaw",
+      "to": "gateway",
+      "fromAnchor": "s",
+      "toAnchor": "n",
+      "color": "#76B900",
+      "label": "lifecycle + policy",
+      "labelX": 565,
+      "labelY": 535
+    },
+    {
+      "from": "gateway",
+      "to": "openclaw",
+      "fromAnchor": "e",
+      "toAnchor": "w",
+      "route": "vh",
+      "midY": 490,
+      "color": "#76B900",
+      "bidirectional": true,
+      "label": "sandbox control",
+      "labelX": 705,
+      "labelY": 475
+    },
+    {
+      "from": "gateway",
+      "to": "hermes",
+      "fromAnchor": "e",
+      "toAnchor": "w",
+      "route": "vh",
+      "midY": 515,
+      "color": "#76B900",
+      "bidirectional": true
+    },
+    {
+      "from": "gateway",
+      "to": "dcode",
+      "fromAnchor": "e",
+      "toAnchor": "w",
+      "route": "vh",
+      "midY": 540,
+      "color": "#76B900",
+      "bidirectional": true
+    },
+    {
+      "from": "gateway",
+      "to": "vllm",
+      "fromAnchor": "e",
+      "toAnchor": "w",
+      "route": "hv",
+      "color": "#76B900",
+      "label": "local route",
+      "labelY": 795
+    },
+    {
+      "points": [[635, 815], [1465, 815], [1465, 465], [1585, 465]],
+      "color": "#76B900",
+      "label": "credentialed cloud route",
+      "labelX": 1455,
+      "labelY": 800
+    },
+    {
+      "points": [[1375, 605], [1480, 605], [1480, 760], [1585, 760]],
+      "color": "#80868B",
+      "style": "dashed",
+      "label": "allowlisted egress",
+      "labelX": 1480,
+      "labelY": 640
+    }
+  ]
+}

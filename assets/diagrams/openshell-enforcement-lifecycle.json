@@ -1,0 +1,221 @@
+{
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "title": "OpenShell Enforcement Lifecycle",
+    "subtitle": "Default deny makes every governed resource access an explainable allow-or-deny decision",
+    "titleAlign": "center"
+  },
+  "panels": [
+    {
+      "id": "sandbox",
+      "label": "UNTRUSTED AGENT SANDBOX",
+      "subtitle": "The harness asks; it does not choose its own authority",
+      "x": 55,
+      "y": 190,
+      "w": 405,
+      "h": 760,
+      "rx": 20,
+      "stroke": "#8A8F98",
+      "strokeWidth": 2,
+      "dashed": true
+    },
+    {
+      "id": "openshell",
+      "label": "TRUSTED HOST — NVIDIA OPENSHELL",
+      "subtitle": "Evaluate the declared policy before the action reaches a resource",
+      "x": 510,
+      "y": 190,
+      "w": 720,
+      "h": 760,
+      "rx": 20,
+      "stroke": "#76B900",
+      "strokeWidth": 2,
+      "fill": "#FBFFF6",
+      "titleColor": "green"
+    },
+    {
+      "id": "outcomes",
+      "label": "EXPLICIT OUTCOMES",
+      "subtitle": "Both paths return evidence the learner can inspect",
+      "x": 1280,
+      "y": 190,
+      "w": 585,
+      "h": 760,
+      "rx": 20,
+      "stroke": "#444444",
+      "strokeWidth": 2
+    }
+  ],
+  "nodes": [
+    {
+      "id": "agent",
+      "kind": "card",
+      "label": "Managed Agent Harness",
+      "icon": "marketing:generative-and-agentic-ai",
+      "iconColor": "#76B900",
+      "stroke": "#76B900",
+      "fill": "#FFFFFF",
+      "x": 105,
+      "y": 330,
+      "w": 305,
+      "h": 385,
+      "items": [
+        "OpenClaw • Hermes • dcode",
+        "Requests files, processes, network, or inference",
+        "Receives a result or a visible denial"
+      ],
+      "detail": "No policy self-escalation • no raw provider key"
+    },
+    {
+      "id": "request",
+      "kind": "tile",
+      "label": "One Bounded Action",
+      "detail": "Intent + target + operation",
+      "icon": "marketing:request-data",
+      "frame": "hex",
+      "fill": "#1D9BD7",
+      "iconColor": "#FFFFFF",
+      "x": 150,
+      "y": 760,
+      "w": 215,
+      "h": 155,
+      "compact": true
+    },
+    {
+      "id": "policy",
+      "kind": "card",
+      "label": "OpenShell Policy Engine",
+      "icon": "marketing:networking-security-firewall",
+      "iconColor": "#76B900",
+      "stroke": "#76B900",
+      "fill": "#FFFFFF",
+      "x": 555,
+      "y": 280,
+      "w": 325,
+      "h": 445,
+      "items": [
+        {"icon": "gui:line:shield", "label": "Filesystem — Landlock paths"},
+        {"icon": "gui:line:firewall", "label": "Network — host + method"},
+        {"icon": "gui:line:check", "label": "Process — Seccomp rules"},
+        {"icon": "gui:line:route", "label": "Inference — provider route"}
+      ],
+      "detail": "The checked-in policy is the reviewable source of authority"
+    },
+    {
+      "id": "decision",
+      "kind": "metric",
+      "value": "MATCH?",
+      "label": "Policy decision",
+      "detail": "Identity + operation + target + current policy",
+      "color": "#76B900",
+      "x": 930,
+      "y": 390,
+      "w": 245,
+      "h": 190
+    },
+    {
+      "id": "evidence",
+      "kind": "metric",
+      "value": "EVIDENCE",
+      "label": "OpenShell logs / OCSF export",
+      "detail": "Decision, target, source, timing — never treat silence as proof",
+      "color": "#80868B",
+      "x": 760,
+      "y": 775,
+      "w": 405,
+      "h": 140
+    },
+    {
+      "id": "allow",
+      "kind": "card",
+      "label": "ALLOW — Least Privilege",
+      "icon": "gui:line:check-circle",
+      "iconColor": "#76B900",
+      "stroke": "#76B900",
+      "fill": "#FBFFF6",
+      "x": 1340,
+      "y": 255,
+      "w": 465,
+      "h": 315,
+      "items": [
+        "Only the matched operation proceeds",
+        "Inference placeholders resolve on the trusted host",
+        "Result returns to the sandbox"
+      ],
+      "detail": "Authority stays narrow and observable"
+    },
+    {
+      "id": "deny",
+      "kind": "card",
+      "label": "DENY — Stop Before Access",
+      "icon": "gui:line:shield-off",
+      "iconColor": "#E85B00",
+      "stroke": "#E85B00",
+      "fill": "#FFF8F3",
+      "x": 1340,
+      "y": 605,
+      "w": 465,
+      "h": 315,
+      "items": [
+        "No undeclared resource access",
+        "No credential or provider egress",
+        "Denial is an expected test outcome"
+      ],
+      "detail": "Fix the policy or the request — do not bypass the boundary"
+    }
+  ],
+  "edges": [
+    {
+      "from": "agent",
+      "to": "request",
+      "fromAnchor": "s",
+      "toAnchor": "n",
+      "color": "#1D9BD7",
+      "label": "proposes action"
+    },
+    {
+      "points": [[365, 838], [500, 838], [500, 755], [718, 755], [718, 725]],
+      "color": "#444444",
+      "label": "route governed access",
+      "labelX": 610,
+      "labelY": 744
+    },
+    {
+      "from": "policy",
+      "to": "decision",
+      "fromAnchor": "e",
+      "toAnchor": "w",
+      "color": "#76B900",
+      "label": "evaluate"
+    },
+    {
+      "from": "decision",
+      "to": "allow",
+      "fromAnchor": "e",
+      "toAnchor": "w",
+      "color": "#76B900",
+      "label": "declared match"
+    },
+    {
+      "points": [[1175, 485], [1250, 485], [1250, 762], [1340, 762]],
+      "color": "#E85B00",
+      "label": "no match → deny",
+      "labelX": 1250,
+      "labelY": 710
+    },
+    {
+      "from": "decision",
+      "to": "evidence",
+      "fromAnchor": "s",
+      "toAnchor": "n",
+      "route": "vh",
+      "midY": 745,
+      "color": "#80868B",
+      "style": "dashed",
+      "label": "record decision",
+      "labelX": 1110,
+      "labelY": 735
+    }
+  ]
+}

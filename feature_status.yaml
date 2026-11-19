@@ -1,0 +1,196 @@
+# Source-backed capability status for the managed course stack.
+#
+# `upstream_status` describes the product contract. `course_status` describes
+# the evidence in this repository for the exact managed versions below. A
+# source-verified capability is not called live-verified until it is rerun on
+# the current target environment.
+
+features:
+  - name: "policy-tiers"
+    upstream_status: "supported"
+    course_status: "statically-verified"
+    affected_versions: ["nemoclaw v0.0.79"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/tree/v0.0.79"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Review the concrete service presets and read/read-write access selected by the tier."
+    issue_url: null
+    guidance: "Choose restricted, balanced, or open during onboarding; use lower-level OpenShell policy only in the explicitly standalone labs."
+
+  - name: "managed-vllm"
+    upstream_status: "caveated"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "DGX Spark", "vLLM 26.05.post1"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/src/lib/inference/vllm.ts"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Docker must be authenticated to nvcr.io before non-interactive onboarding."
+      - "The managed container must use nvcr.io/nvidia/vllm:26.05.post1-py3."
+      - "The served model and OpenShell route must both report nvidia/Qwen3.6-35B-A3B-NVFP4."
+      - "The implemented course path must be rerun on DGX Spark before it becomes live-verified."
+    issue_url: null
+    guidance: "Use NEMOCLAW_PROVIDER=install-vllm with the validated Spark model slug; retain Ollama only as an explicit host-side fallback and never install it inside the sandbox."
+
+  - name: "managed-deepagents-code"
+    upstream_status: "tested"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "deepagents-code 0.1.34"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/langchain-deepagents-code/manifest.yaml"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Use the hash-locked managed runtime rather than the newer standalone package."
+      - "The three-notebook course branch has passed structure, syntax, and safe-skip execution checks."
+      - "The course path must be rerun on a supported Linux target before it becomes live-verified."
+    issue_url: null
+    guidance: "Use nemo-deepagents onboard or nemoclaw onboard --agent langchain-deepagents-code; do not replace managed 0.1.34 with a standalone release."
+
+  - name: "managed-hermes"
+    upstream_status: "tested"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "hermes 0.17.0"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/hermes/manifest.yaml"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Use the NemoClaw-managed 0.17.0 runtime rather than the newer standalone Hermes release."
+      - "Treat nemohermes as a terminal and API runtime; it does not provide the OpenClaw dashboard or gateway workflow."
+      - "The managed Hermes course branch must be rerun on a supported Linux target before it becomes live-verified."
+    issue_url: null
+    guidance: "Onboard through the managed Hermes blueprint, capture exact runtime versions and per-cell evidence, and keep OpenClaw-only integrations and operations outside this branch."
+
+  - name: "mac-first-inference"
+    upstream_status: "caveated"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "openshell 0.0.72", "Apple Silicon macOS with Colima"]
+    evidence_url: "https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/get-started/prerequisites"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Use a dedicated Colima profile and the pinned managed compatibility unit."
+      - "Use a hosted provider for the course proof; managed local vLLM is the DGX path."
+      - "The current first-inference notebook must be rerun on Apple Silicon before it becomes live-verified."
+    issue_url: null
+    guidance: "Record a real routed response plus exact NemoClaw, OpenShell, OpenClaw, Colima, and macOS versions; a safe skip is not target evidence."
+
+  - name: "brev-first-inference"
+    upstream_status: "supported"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "openshell 0.0.72", "Brev Launchable"]
+    evidence_url: "https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/inference/inference-options"
+    verified_date: "2026-07-10"
+    conditions:
+      - "The Brev Launchable owns the managed runtime and registry state; the workstation preparation path must not reinstall or synthesize them."
+      - "The proof must route through inference.local to NVIDIA Cloud inference and return a non-empty response."
+      - "The current staged checkout and notebooks must be rerun on Brev before they become live-verified."
+    issue_url: null
+    guidance: "Run the workstation prepare notebook, continue on the exact prepared Brev checkout, and retain redacted per-cell evidence with exact managed versions."
+
+  - name: "sandbox-create"
+    upstream_status: "supported"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "openshell 0.0.72"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/tree/v0.0.79"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Managed labs use NemoClaw onboarding; direct creation is limited to standalone OpenShell labs."
+    issue_url: null
+    guidance: "Use nemoclaw onboard for managed sandboxes and openshell sandbox create only where the notebook explicitly labels the runtime standalone."
+
+  - name: "openclaw-tui"
+    upstream_status: "supported"
+    course_status: "needs-live-uat"
+    affected_versions: ["openclaw 2026.6.10"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/openclaw/manifest.yaml"
+    verified_date: "2026-07-10"
+    conditions:
+      - "The managed gateway and CLI must both report 2026.6.10."
+    issue_url: null
+    guidance: "Validate the managed image read-only and rebuild through NemoClaw on a version mismatch."
+
+  - name: "inference-routing"
+    upstream_status: "supported"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "openshell 0.0.72"]
+    evidence_url: "https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/inference/switch-inference-providers"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Managed route changes require a bounded shields window."
+    issue_url: null
+    guidance: "Run nemoclaw inference set --sandbox <name> so registry, agent configuration, and gateway route stay aligned; do not mutate the shared route directly with OpenShell."
+
+  - name: "ocsf-json-export"
+    upstream_status: "experimental"
+    course_status: "needs-live-uat"
+    affected_versions: ["openshell 0.0.72"]
+    evidence_url: "https://docs.nvidia.com/openshell/observability/accessing-logs"
+    verified_date: "2026-07-10"
+    conditions:
+      - "The gateway must expose the ocsf_json_enabled capability."
+    issue_url: null
+    guidance: "Capability-detect OCSF JSONL export and fall back to regular OpenShell logs when the managed gateway does not expose it."
+
+  - name: "custom-policy-presets"
+    upstream_status: "supported"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/tree/v0.0.79"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Dry-run and review every reusable policy pack before application."
+    issue_url: null
+    guidance: "Use nemoclaw <name> policy-add --from-file ... --dry-run or --from-dir ... --dry-run before applying reviewed packs."
+
+  - name: "device-pairing-recovery"
+    upstream_status: "supported"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "openclaw 2026.6.10"]
+    evidence_url: "https://docs.openclaw.ai/cli/devices"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Exactly one repair request must match both the device ID and public key of an already-paired device."
+      - "Requested roles and scopes must be subsets of the active paired-device authority; any escalation requires explicit operator review."
+      - "A live approval requires exact MUTATION_TARGET and MUTATION_REQUEST_ID authorization for the reviewed request."
+    issue_url: null
+    guidance: "Approve only the verified, explicitly authorized request ID; reject ambiguous matches, authority escalation, and unattended selection by recency."
+
+  - name: "nemoclaw-shields"
+    upstream_status: "experimental"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/tree/v0.0.79"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Every shields-down window needs a timeout, reason, and verified restore step."
+    issue_url: null
+    guidance: "Use nemoclaw <name> shields down only for bounded maintenance, then restore with nemoclaw <name> shields up."
+
+  - name: "setup-gateway-warmup-race"
+    upstream_status: "unknown"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79", "openclaw 2026.6.10"]
+    evidence_url: "https://docs.openclaw.ai/cli/devices"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Only the trusted same-device repair path is automated."
+    issue_url: null
+    guidance: "If a trusted repair is pending, use the explicit-ID recovery in shared/utils/platform.py; never approve by recency."
+
+  - name: "nemoclaw-sandbox-gpu-flags"
+    upstream_status: "supported"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/tree/v0.0.79"
+    verified_date: "2026-07-10"
+    conditions:
+      - "The target must expose a compatible NVIDIA Container Toolkit runtime."
+    issue_url: null
+    guidance: "Use GPU auto-detection or pass --sandbox-gpu, --no-sandbox-gpu, or --sandbox-gpu-device <device> during onboarding."
+
+  - name: "nemoclaw-host-aliases"
+    upstream_status: "supported"
+    course_status: "needs-live-uat"
+    affected_versions: ["nemoclaw v0.0.79"]
+    evidence_url: "https://github.com/NVIDIA/NemoClaw/tree/v0.0.79"
+    verified_date: "2026-07-10"
+    conditions:
+      - "Aliases must remain managed through NemoClaw rather than direct sandbox file edits."
+    issue_url: null
+    guidance: "Use nemoclaw <name> hosts-add, hosts-list, and hosts-remove instead of editing managed sandbox files directly."

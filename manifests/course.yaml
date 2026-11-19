@@ -1,0 +1,158 @@
+# Course manifest for the distilled Claw training course.
+# Each entry defines a notebook with metadata; validated by
+# scripts/validate_manifests.py, which also checks that every notebook under
+# tracks/ is registered here.
+# Activity types describe the learner contract:
+#   concept = explanatory lesson; guided-lab = execute a supplied walkthrough;
+#   student-exercise = complete and validate an authored task; reference = optional lookup.
+#
+# Run ./setup.sh before Module 2. It installs the pinned stack, creates the
+# `agent` sandbox, and proves first inference.
+
+entries:
+  # Module 1: Concepts & Architecture
+  - id: conc-01
+    title: "NemoClaw, OpenShell, and Agent Harnesses"
+    path: tracks/01-concepts-architecture/01_concepts.ipynb
+    track: concepts-architecture
+    module: 1
+    duration: 25
+    prerequisites: []
+    skills:
+      - nemoclaw
+      - openshell
+      - agent-harnesses
+      - kernel-distro-analogy
+      - managed-compatibility
+    activity_type: concept
+    difficulty: beginner
+
+  - id: conc-02
+    title: "Managed Runtime Architecture and Trust Boundaries"
+    path: tracks/01-concepts-architecture/02_architecture.ipynb
+    track: concepts-architecture
+    module: 1
+    duration: 35
+    prerequisites:
+      - conc-01
+    skills:
+      - gateway-sandbox
+      - docker-driver
+      - defense-in-depth
+      - inference-routing
+      - trusted-operator
+    activity_type: concept
+    difficulty: beginner
+
+  # Module 2: OpenShell Runtime
+  - id: m2-openshell-overview
+    title: "What Is OpenShell? (Comprehensive CLI Reference)"
+    path: tracks/02-openshell-runtime/01_what_is_openshell.ipynb
+    track: openshell
+    module: 2
+    duration: 30
+    prerequisites:
+      - conc-02
+    skills:
+      - openshell-cli
+      - sandbox-lifecycle
+      - logs
+      - policy-management
+      - providers
+    activity_type: guided-lab
+    difficulty: intermediate
+
+  - id: m2-sandbox-policies
+    title: "Sandbox Policies: Filesystem, Process, Network, and Inference"
+    path: tracks/02-openshell-runtime/02_sandbox_policies.ipynb
+    track: openshell
+    module: 2
+    duration: 55
+    prerequisites:
+      - m2-openshell-overview
+    skills:
+      - default-deny
+      - filesystem-policy
+      - landlock
+      - process-policy
+      - privilege-drop
+      - network-policy
+      - egress-proxy
+      - l7-rules
+      - inference-routing
+      - privacy-router
+      - credential-isolation
+    activity_type: student-exercise
+    difficulty: intermediate
+
+  # Module 3: NemoClaw-managed OpenClaw
+  - id: m3-nemoclaw-openclaw
+    title: "NemoClaw with OpenClaw"
+    path: tracks/03-nemoclaw/01_nemoclaw_openclaw.ipynb
+    track: nemoclaw
+    module: 3
+    duration: 45
+    prerequisites:
+      - m2-sandbox-policies
+    skills:
+      - nemoclaw-cli
+      - openclaw
+      - openclaw-workspace
+      - skills
+      - gateway-health
+      - sessions
+      - inference-policy
+      - operational-gates
+    activity_type: guided-lab
+    difficulty: intermediate
+
+  # Module 4: Real-World Integrations
+  - id: m4-nasa-apod
+    title: "NASA APOD: Your First API-backed Skill"
+    path: tracks/04-integrations/01_nasa_apod.ipynb
+    track: integrations
+    module: 4
+    duration: 25
+    prerequisites:
+      - m3-nemoclaw-openclaw
+    skills:
+      - skill-contract-review
+      - network-policy-add
+      - skill-deploy
+      - api-integration
+      - response-validation
+    activity_type: student-exercise
+    difficulty: intermediate
+
+  - id: m4-daily-financial-briefing
+    title: "Daily Financial Briefing Agent"
+    path: tracks/04-integrations/02_daily_financial_briefing.ipynb
+    track: integrations
+    module: 4
+    duration: 40
+    prerequisites:
+      - m4-nasa-apod
+    skills:
+      - multi-api-skill
+      - canonical-soul-review
+      - financial-analyst-persona
+      - coingecko
+      - hackernews
+      - open-meteo
+    activity_type: guided-lab
+    difficulty: intermediate
+
+learning_paths:
+  - id: distilled
+    title: "Distilled Claw Training (about 4.25 hours)"
+    variants:
+      - id: default
+        title: "Hosted NVIDIA Endpoints"
+        entry_ids:
+          - conc-01
+          - conc-02
+          - m2-openshell-overview
+          - m2-sandbox-policies
+          - m3-nemoclaw-openclaw
+          - m4-nasa-apod
+          - m4-daily-financial-briefing

@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenShell Enforcement Lifecycle</title>
+  <style>:root {
+  --green: #76B900;
+  --dark-green: #57B300;
+  --yellow: #F8B000;
+  --orange: #E85B00;
+  --blue: #1D9BD7;
+  --text: #111111;
+  --muted: #5F6368;
+  --line: #80868B;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: #f7f7f7; }
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: start center;
+  padding: 24px;
+}
+.canvas {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.08);
+  transform-origin: top left;
+}
+@media print {
+  html, body, .page { padding: 0; background: #fff; min-height: 0; }
+  .canvas { box-shadow: none; }
+}
+.connectors {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: visible;
+}
+.connector {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.connector-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  fill: #3f4549;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 5px;
+}
+.diagram-title-block {
+  position: absolute;
+  z-index: 30;
+  max-width: 1680px;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+.title-left {
+  transform: none;
+  text-align: left;
+}
+.diagram-title {
+  font-size: 44px;
+  line-height: 1.05;
+  font-weight: 700;
+  color: #000;
+  white-space: nowrap;
+}
+.diagram-subtitle {
+  margin-top: 6px;
+  font-size: 28px;
+  line-height: 1.15;
+  color: var(--dark-green);
+}
+.diagram-panel {
+  position: absolute;
+  z-index: 1;
+  border: var(--panel-stroke-width) solid var(--panel-stroke);
+  background: var(--panel-fill);
+  border-radius: var(--panel-radius);
+}
+.panel-dashed { border-style: dashed; }
+.panel-label {
+  position: absolute;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.panel-subtitle {
+  position: absolute;
+  left: 22px;
+  top: 45px;
+  font-size: 15px;
+  color: #333;
+}
+.diagram-node {
+  position: absolute;
+  z-index: 10;
+}
+.node-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+}
+.symbol {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.symbol-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.symbol-art {
+  position: absolute;
+  left: var(--inset);
+  top: var(--inset);
+  right: var(--inset);
+  bottom: var(--inset);
+  display: grid;
+  place-items: center;
+  color: var(--art-color);
+}
+.mark-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: currentColor;
+  object-fit: contain;
+}
+.logo-text-mark,
+.logo-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-weight: 700;
+  color: currentColor;
+  font-size: 28px;
+}
+.logo-fallback {
+  border: 1.4px solid #8C8F92;
+  border-radius: 50%;
+  color: #555;
+  background: #fff;
+}
+.node-label {
+  width: 100%;
+  margin-top: 12px;
+  font-size: 21px;
+  line-height: 1.14;
+  color: #111;
+}
+.green-label {
+  color: var(--dark-green);
+  font-weight: 700;
+}
+.node-detail {
+  width: 100%;
+  margin-top: 7px;
+  font-size: 14px;
+  line-height: 1.18;
+  font-weight: 700;
+  color: #111;
+}
+.node-compact .node-label { font-size: 16px; }
+.node-card {
+  color: #111;
+}
+.card-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border: var(--card-stroke-width) solid var(--card-stroke);
+  background: var(--card-fill);
+  border-radius: var(--card-radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 26px;
+}
+.card-stack {
+  position: absolute;
+  inset: -10px -10px 10px 10px;
+  border: 1.4px solid var(--card-stroke);
+  border-radius: var(--card-radius);
+  background: #fff;
+  z-index: -1;
+}
+.stack-2 { transform: translate(10px, -10px); }
+.stack-3 { transform: translate(20px, -20px); }
+.card-title {
+  width: 100%;
+  font-size: 22px;
+  line-height: 1.13;
+  font-weight: 700;
+  text-align: center;
+}
+.card-symbol { margin-top: 12px; }
+.card-items {
+  width: 100%;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.card-pill {
+  width: 100%;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 5px 12px;
+  border-radius: 4px;
+  background: #F1F1F1;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-align: center;
+}
+.card-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 38px;
+}
+.card-row-label {
+  font-size: 16px;
+  line-height: 1.12;
+  font-weight: 700;
+}
+.card-detail {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.18;
+  text-align: center;
+}
+.node-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.metric-value {
+  font-size: 56px;
+  line-height: .95;
+  font-weight: 700;
+  color: var(--metric-color);
+}
+.metric-label {
+  margin-top: 10px;
+  font-size: 21px;
+  line-height: 1.12;
+  font-weight: 700;
+}
+.metric-detail {
+  margin-top: 4px;
+  font-size: 17px;
+  line-height: 1.12;
+}</style>
+</head>
+<body>
+  <main class="page">
+    <section class="canvas" role="img" aria-label="OpenShell Enforcement Lifecycle" style="width: 1920px; height: 1080px;">
+      <svg class="connectors" width="1920" height="1080" viewBox="0 0 1920 1080" aria-hidden="true">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+          </marker>
+          <marker id="arrow-start" viewBox="0 0 10 10" refX="1.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 10 0 L 0 5 L 10 10 z" fill="context-stroke"></path>
+          </marker>
+        </defs>
+      </svg>
+      <div class="diagram-title-block title-center" style="left: 960.0px; top: 58.0px"><div class="diagram-title">OpenShell Enforcement Lifecycle</div><div class="diagram-subtitle">Default deny makes every governed resource access an explainable allow-or-deny decision</div></div>
+      <div class="diagram-panel panel-dashed" data-panel-id="sandbox" style="left: 55.0px; top: 190.0px; width: 405.0px; height: 760.0px; --panel-radius: 20.0px; --panel-stroke: #8A8F98; --panel-fill: #FFFFFF; --panel-stroke-width: 2.0px"><div class="panel-label" style="left: 22.0px; top: 18.0px; color: #111111; font-size: 15.0px">UNTRUSTED AGENT SANDBOX</div><div class="panel-subtitle" style="left: 22.0px; top: 45.0px; font-size: 15.0px">The harness asks; it does not choose its own authority</div></div>
+<div class="diagram-panel" data-panel-id="openshell" style="left: 510.0px; top: 190.0px; width: 720.0px; height: 760.0px; --panel-radius: 20.0px; --panel-stroke: #76B900; --panel-fill: #FBFFF6; --panel-stroke-width: 2.0px"><div class="panel-label" style="left: 22.0px; top: 18.0px; color: #57B300; font-size: 15.0px">TRUSTED HOST — NVIDIA OPENSHELL</div><div class="panel-subtitle" style="left: 22.0px; top: 45.0px; font-size: 15.0px">Evaluate the declared policy before the action reaches a resource</div></div>
+<div class="diagram-panel" data-panel-id="outcomes" style="left: 1280.0px; top: 190.0px; width: 585.0px; height: 760.0px; --panel-radius: 20.0px; --panel-stroke: #444444; --panel-fill: #FFFFFF; --panel-stroke-width: 2.0px"><div class="panel-label" style="left: 22.0px; top: 18.0px; color: #111111; font-size: 15.0px">EXPLICIT OUTCOMES</div><div class="panel-subtitle" style="left: 22.0px; top: 45.0px; font-size: 15.0px">Both paths return evidence the learner can inspect</div></div>
+      <div class="diagram-node node-card" data-diagram-node data-id="agent" style="left: 105.0px; top: 330.0px; width: 305.0px; height: 385.0px"><div class="card-shell" style="--card-fill: #FFFFFF; --card-stroke: #76B900; --card-radius: 12.0px; --card-stroke-width: 1.3px"><div class="card-title">Managed Agent Harness</div><div class="card-symbol"><div class="symbol frame-none" style="width: 56.0px; height: 56.0px; --frame-fill: #FFFFFF; --frame-stroke: #76B900; --frame-stroke-width: 1.5; --art-color: #76B900; --inset: 0.0px"><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><title>Managed Agent Harness</title><g><path d="M15.51,39.517l0.01,-5h1l-0.02,6h-11v-9.71l4.29,-4.29h1.71v1h-1v4h-4v8zM7.21,30.507h2.29v-2.29z" fill="currentColor"/><path d="M13.5,33.497h-5v-1h5zM13.5,35.497h-5v-1h5zM11.5,37.497h-3v-1h3zM12.56,19.517h-7.06v-13h13v5.98h-1v-4.98h-11v11h6.06z" fill="currentColor"/><path d="M12.05,12.767l-2.93,3.75h3.88v1h-5.93l4.88,-6.26l2.11,2.11l1.94,-1.29v1.2l-2.06,1.38zM10.69,10.017c0,0.83 -0.67,1.5 -1.5,1.5c-0.83,0 -1.5,-0.67 -1.5,-1.5c0,-0.83 0.67,-1.5 1.5,-1.5c0.83,0 1.5,0.67 1.5,1.5M8.69,10.017c0,0.28 0.22,0.5 0.5,0.5c0.28,0 0.5,-0.22 0.5,-0.5c0,-0.28 -0.22,-0.5 -0.5,-0.5c-0.28,0 -0.5,0.22 -0.5,0.5M35.5,24.017c0,6.34 -5.16,11.5 -11.5,11.5c-6.34,0 -11.5,-5.16 -11.5,-11.5c0,-6.34 5.16,-11.5 11.5,-11.5c6.34,0 11.5,5.16 11.5,11.5M24,34.517c5.79,0 10.5,-4.71 10.5,-10.5c0,-5.79 -4.71,-10.5 -10.5,-10.5c-5.79,0 -10.5,4.71 -10.5,10.5c0,5.79 4.71,10.5 10.5,10.5" fill="currentColor"/><path d="M43.5,6.517v11h-2.29l-2.71,2.7v-2.71l-4,-0.01v-1l5,0.02v1.29l1.29,-1.29h1.71v-9h-12v4.98h-1v-5.98zM41.21,33.007c0,0.07 -0.01,0.14 -0.01,0.21l2.16,2.16l-1.55,2.69l-2.9,-0.78c-0.15,0.1 -0.31,0.2 -0.47,0.28l-0.78,2.93h-3.1l-0.76,-2.83c-0.19,-0.09 -0.37,-0.19 -0.55,-0.31l-2.88,0.77l-1.23,-2.12h1.16l0.55,0.96l2.59,-0.69l0.19,0.14c0.24223,0.17888 0.50389,0.32984 0.78,0.45l0.22,0.09l0.69,2.56h1.57l0.7,-2.63l0.21,-0.1c0.24,-0.11 0.48,-0.26 0.71,-0.43l0.19,-0.14l2.61,0.7l0.78,-1.36l-1.95,-1.96l0.04,-0.41c0.02,-0.05 0.02,-0.11 0.02,-0.17c0,-0.09 -0.01,-0.17 -0.02,-0.26l-0.05,-0.41l1.94,-1.94l-0.78,-1.36l-2.65,0.71l-0.19,-0.14c-0.22,-0.16 -0.46,-0.3 -0.71,-0.41l-0.22,-0.1l-0.52,-1.94v-1.66h0.59l0.78,2.9c0.16,0.08 0.32,0.17 0.47,0.27l2.94,-0.79l1.55,2.69l-2.14,2.14c0.02,0.1 0.02,0.2 0.02,0.3zM29.59,24.587c1.1,0 2,0.9 2,2c0,1.1 -0.9,2 -2,2c-0.54,0 -1.03,-0.22 -1.39,-0.57l-2.3,1.9c0.07,0.2 0.12,0.42 0.12,0.65c0,1.1 -0.9,2 -2,2c-1.1,0 -2,-0.9 -2,-2c0,-0.22 0.04,-0.43 0.11,-0.63l-2.34,-1.88c-0.35,0.33 -0.82,0.53 -1.34,0.53c-1.1,0 -2,-0.9 -2,-2c0,-1.1 0.9,-2 2,-2c0.22,0 0.42,0.04 0.61,0.1l0.5,-0.83l-0.53,-0.93c-0.18,0.05 -0.37,0.09 -0.57,0.09c-1.1,0 -2,-0.9 -2,-2c0,-1.1 0.9,-2 2,-2c0.56,0 1.07,0.23 1.43,0.6l2.22,-1.66c-0.05199,-0.16848 -0.07895,-0.34368 -0.08,-0.52c0,-1.1 0.9,-2 2,-2c1.1,0 2,0.9 2,2c0,0.18 -0.03,0.35 -0.08,0.52l2.22,1.66c0.36,-0.37 0.86,-0.6 1.42,-0.6c1.1,0 2,0.9 2,2c0,1.1 -0.9,2 -2,2c-0.2,0 -0.4,-0.04 -0.59,-0.1l-0.52,0.92l0.51,0.85c0.19,-0.06 0.4,-0.1 0.61,-0.1zM29.6,20.017c-0.55,0 -1,0.45 -1,1c0,0.55 0.45,1 1,1c0.55,0 1,-0.45 1,-1c0,-0.55 -0.45,-1 -1,-1M18.46,22.017c0.55,0 1,-0.45 1,-1c0,-0.55 -0.45,-1 -1,-1c-0.55,0 -1,0.45 -1,1c0,0.55 0.45,1 1,1M18.46,27.587c0.55,0 1,-0.45 1,-1c0,-0.55 -0.45,-1 -1,-1c-0.55,0 -1,0.45 -1,1c0,0.55 0.45,1 1,1M27.69,20.487l-2.13,-1.59l1.64,2.76l0.45,-0.23c-0.03,-0.14 -0.05,-0.28 -0.05,-0.42c0,-0.18 0.03,-0.35 0.08,-0.52zM25.93,23.407c0.06,0.19 0.1,0.38 0.1,0.59c0,0.08 -0.02,0.15 -0.02,0.23l0.86,0.43l0.46,-0.81l-0.52,-0.88zM24.03,16.427c-0.55,0 -1,0.45 -1,1c0,0.55 0.45,1 1,1c0.55,0 1,-0.45 1,-1c0,-0.55 -0.45,-1 -1,-1M23.44,19.327l-1.66,2.78l0.89,0.44c0.35,-0.34 0.84,-0.55 1.37,-0.55c0.53,0 1.01,0.21 1.37,0.55l0.89,-0.44l-1.66,-2.78c-0.19,0.06 -0.39,0.1 -0.61,0.1c-0.22,0 -0.42,-0.04 -0.61,-0.1zM25.03,23.997c0,-0.55 -0.45,-1 -1,-1c-0.55,0 -1,0.45 -1,1c0,0.55 0.45,1 1,1c0.55,0 1,-0.45 1,-1M22.05,24.237c-0.01,-0.08 -0.02,-0.15 -0.02,-0.23c0,-0.21 0.04,-0.4 0.1,-0.59l-0.88,-0.44l-0.53,0.89l0.46,0.8l0.87,-0.44zM22.52,18.897l-2.13,1.59c0.05,0.17 0.08,0.34 0.08,0.52c0,0.15 -0.02,0.29 -0.05,0.42l0.45,0.23l1.64,-2.76zM19.97,22.327c-0.02,0.02 -0.07,0.08 -0.07,0.08l0.26,0.46l0.2,-0.34l-0.4,-0.2zM19.97,25.277l0.32,-0.16l-0.15,-0.26l-0.22,0.37c0.01,0.01 0.04,0.05 0.04,0.05zM20.34,27.207l2.09,1.68l-1.66,-2.91l-0.36,0.18c0.03,0.14 0.05,0.28 0.05,0.42c0,0.22 -0.04,0.43 -0.11,0.63zM24.03,31.567c0.55,0 1,-0.45 1,-1c0,-0.55 -0.45,-1 -1,-1c-0.55,0 -1,0.45 -1,1c0,0.55 0.45,1 1,1M24.61,28.657l1.78,-3.13l-0.73,-0.36c-0.37,0.5 -0.95,0.83 -1.62,0.83c-0.67,0 -1.26,-0.33 -1.62,-0.83l-0.74,0.37l1.78,3.12c0.18,-0.05 0.37,-0.09 0.57,-0.09c0.2,0 0.39,0.04 0.57,0.09zM25.65,28.837l2.04,-1.69c-0.05645,-0.18144 -0.08676,-0.37001 -0.09,-0.56c0,-0.15 0.02,-0.28 0.05,-0.42l-0.38,-0.19l-1.62,2.85zM28.1,25.267c0.01,-0.01 0.04,-0.05 0.04,-0.05l-0.23,-0.38l-0.15,0.27l0.34,0.17zM27.9,22.857l0.26,-0.46c-0.01,-0.02 -0.05,-0.07 -0.05,-0.07l-0.4,0.2l0.19,0.32zM29.6,27.587c0.55,0 1,-0.45 1,-1c0,-0.55 -0.45,-1 -1,-1c-0.55,0 -1,0.45 -1,1c0,0.55 0.45,1 1,1" fill="currentColor"/><path d="M36,35.517c-1.38071,0 -2.5,-1.11929 -2.5,-2.5c0,-1.38071 1.11929,-2.5 2.5,-2.5c1.38071,0 2.5,1.11929 2.5,2.5c0,1.38071 -1.11929,2.5 -2.5,2.5M36,31.517c-0.83,0 -1.5,0.67 -1.5,1.5c0,0.83 0.67,1.5 1.5,1.5c0.83,0 1.5,-0.67 1.5,-1.5c0,-0.83 -0.67,-1.5 -1.5,-1.5" fill="currentColor"/></g></svg></div></div></div><div class="card-items"><div class="card-pill">OpenClaw • Hermes • dcode</div><div class="card-pill">Requests files, processes, network, or inference</div><div class="card-pill">Receives a result or a visible denial</div></div><div class="card-detail">No policy self-escalation • no raw provider key</div></div></div>
+<div class="diagram-node node-tile node-compact" data-diagram-node data-id="request" style="left: 150.0px; top: 760.0px; width: 215.0px; height: 155.0px"><div class="symbol frame-hex" style="width: 103.0px; height: 103.0px; --frame-fill: #1D9BD7; --frame-stroke: #1D9BD7; --frame-stroke-width: 1.5; --art-color: #FFFFFF; --inset: 13.0px"><svg class="symbol-bg" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50,2 91,26 91,74 50,98 9,74 9,26" fill="var(--frame-fill)" stroke="var(--frame-stroke)" stroke-width="var(--frame-stroke-width)"/></svg><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><title>One Bounded Action</title><path fill="currentColor" d="M37.236,33.5l2.412,9h-13.3l2.412,-9zM38.344,41.5l-1.876,-7h-6.941l-1.876,7zM36.5,29c0,1.933 -1.567,3.5 -3.5,3.5c-1.933,0 -3.5,-1.567 -3.5,-3.5c0,-1.933 1.567,-3.5 3.5,-3.5c1.933,0 3.5,1.567 3.5,3.5M30.5,29c0,1.38071 1.11929,2.5 2.5,2.5c1.38071,0 2.5,-1.11929 2.5,-2.5c0,-1.38071 -1.11929,-2.5 -2.5,-2.5c-1.38071,0 -2.5,1.11929 -2.5,2.5M20.5,19.5h-10v-1h10zM20.5,21.5h-10v-1h10zM20.5,23.5h-10v-1h10zM10.5,24.5h6v1h-6zM40.5,15.5v12h-1v-11h-17.91l-1,-5h-12.09v26.079h16v1h-17v-28.079h13.91l1,5z"/></svg></div></div><div class="node-label">One Bounded Action</div><div class="node-detail">Intent + target + operation</div></div>
+<div class="diagram-node node-card" data-diagram-node data-id="policy" style="left: 555.0px; top: 280.0px; width: 325.0px; height: 445.0px"><div class="card-shell" style="--card-fill: #FFFFFF; --card-stroke: #76B900; --card-radius: 12.0px; --card-stroke-width: 1.3px"><div class="card-title">OpenShell Policy Engine</div><div class="card-symbol"><div class="symbol frame-none" style="width: 56.0px; height: 56.0px; --frame-fill: #FFFFFF; --frame-stroke: #76B900; --frame-stroke-width: 1.5; --art-color: #76B900; --inset: 0.0px"><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><title>OpenShell Policy Engine</title><path fill="currentColor" d="M34.5,24c-0.006,5.797 -4.703,10.494 -10.5,10.5c-0.157,0 -0.311,-0.017 -0.467,-0.023l-2.149,8.023h-4.035l2.385,-8.914c-4.72236,-2.09587 -7.2166,-7.31718 -5.87944,-12.30771c1.33715,-4.99053 6.10782,-8.26529 11.24544,-7.71929l2.162,-8.059h4.038l-2.464,9.189c3.47701,1.80416 5.66063,5.39379 5.664,9.311M26.102,13.711c0.62144,0.1283 1.22969,0.31376 1.817,0.554l2.081,-7.765h-1.97zM14.5,24c0.00551,5.24442 4.25558,9.49449 9.5,9.5c5.24671,0 9.5,-4.25329 9.5,-9.5c0,-5.24671 -4.25329,-9.5 -9.5,-9.5c-5.24671,0 -9.5,4.25329 -9.5,9.5M22.523,34.384c-0.62815,-0.08819 -1.24701,-0.23311 -1.849,-0.433l-2.023,7.549h1.965zM20.5,10.5h-2v-1h2zM16.5,10.5h-2v-1h2zM12.508,10.5h-2v-1h2zM37.797,10.5h-6.297v-1h6.293l-2.5,-2.5h1.414l3,3l-3,3h-1.414zM22.584,28.8c0.0458,0.67774 0.2103,1.34218 0.486,1.963l0.164,0.34l-0.373,-0.055c-1.64403,-0.30185 -3.06331,-1.33112 -3.861,-2.8c-0.60364,-1.32489 -0.5934,-2.84834 0.028,-4.165l0.134,-0.292l0.458,0.561c0.33494,-1.07049 0.81831,-2.08874 1.436,-3.025c0.781,-1.309 1.667,-2.792 0.907,-4.231l-0.344,-0.652l0.627,0.389c2.608,1.62 4.199,3.438 4.739,5.42c0.154,-0.289 0.266,-0.599 0.334,-0.919l0.054,-0.468l0.3,0.364c1.21887,1.31769 1.8798,3.05638 1.844,4.851c-0.10878,2.19148 -1.40705,4.1481 -3.384,5.1l-0.477,0.246l0.2,-0.5c0.462,-1.162 0.168,-1.953 -1.317,-3.523c-0.46382,-0.46614 -0.79873,-1.04466 -0.972,-1.679c-0.27941,1.21307 -0.02448,2.48771 0.7,3.5l0.246,0.416l-0.469,-0.121c-0.52341,-0.15692 -1.01688,-0.40027 -1.46,-0.72M22.546,27.514c-0.08794,-0.5157 -0.09098,-1.04232 -0.009,-1.559c0.26002,-1.35009 1.01191,-2.55562 2.11,-3.383c0,0 -1.066,2.537 0.609,4.2c0.7974,0.70476 1.38553,1.61532 1.7,2.632c1.78103,-1.68178 2.09494,-4.40061 0.744,-6.444c-0.28076,0.6013 -0.62864,1.1689 -1.037,1.692l-0.322,0.382l-0.029,-0.5c-0.01367,-2.3445 -1.18387,-4.53109 -3.127,-5.843c-0.17819,1.12012 -0.61848,2.1823 -1.285,3.1c-0.74918,1.0574 -1.25557,2.26721 -1.483,3.543l-0.072,0.733l-0.25,-0.106c-0.19793,-0.08991 -0.38428,-0.2034 -0.555,-0.338c-0.13751,0.75462 -0.02112,1.53354 0.331,2.215c0.41366,0.77351 1.06018,1.39729 1.848,1.783c-0.12785,-0.63494 -0.16155,-1.28524 -0.1,-1.93l0.11,-1.159zM42.793,18.5l-2.5,-2.5h1.414l3,3l-3,3h-1.414l2.5,-2.5h-6.293v-1zM39.707,27l3,3l-3,3h-1.414l2.5,-2.5h-6.293v-1h6.293l-2.5,-2.5zM30.707,36l3,3l-3,3h-1.414l2.5,-2.5h-6.293v-1h6.293l-2.5,-2.5zM12.5,19.5h-2v-1h2zM8.5,19.5h-2v-1h2zM4.5,19.5h-2v-1h2zM11.5,29.5h2v1h-2zM7.5,29.5h2v1h-2zM3.5,29.5h2v1h-2zM13.5,38.5h2v1h-2zM9.5,38.5h2v1h-2zM5.509,38.5h2v1h-2z"/></svg></div></div></div><div class="card-items"><div class="card-row"><div class="symbol frame-none" style="width: 34.0px; height: 34.0px; --frame-fill: transparent; --frame-stroke: transparent; --frame-stroke-width: 1.5; --art-color: #76B900; --inset: 0.0px"><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><title>Filesystem — Landlock paths</title><symbol id="icon-gui-line-shield-shield" viewBox="0 0 16 16"><path fill="currentColor" d="M8,2.009l5.978,1.601l0.021,0.36l-0.5,0.03l0.5,-0.03v0.01l0.002,0.02l0.003,0.078c0.00333,0.068 0.00533,0.16333 0.006,0.286c0.002,0.245 -0.002,0.594 -0.027,1.016c-0.0588,1.0768 -0.22632,2.1449 -0.5,3.188c-0.645,2.384 -2.102,5.102 -5.362,5.917l-0.121,0.03l-0.121,-0.03c-3.26,-0.815 -4.717,-3.533 -5.362,-5.917c-0.27368,-1.0431 -0.4412,-2.1112 -0.5,-3.188c-0.02618,-0.45951 -0.03252,-0.91994 -0.019,-1.38l0.002,-0.02v-0.008l0.5,0.028l-0.5,-0.03l0.022,-0.36zM2.99,4.386c-0.002,0.226 0.002,0.547 0.025,0.937c0.045,0.798 0.167,1.87 0.468,2.984c0.596,2.208 1.86,4.455 4.517,5.176c2.657,-0.72 3.92,-2.968 4.517,-5.176c0.301,-1.113 0.423,-2.186 0.468,-2.984c0.022,-0.39 0.026,-0.711 0.025,-0.937l-5.01,-1.342z"/></symbol><use href="#icon-gui-line-shield-shield"/></svg></div></div><div class="card-row-label">Filesystem — Landlock paths</div></div><div class="card-row"><div class="symbol frame-none" style="width: 34.0px; height: 34.0px; --frame-fill: transparent; --frame-stroke: transparent; --frame-stroke-width: 1.5; --art-color: #76B900; --inset: 0.0px"><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><title>Network — host + method</title><symbol id="icon-gui-line-firewall-firewall" viewBox="0 0 16 16"><path fill="currentColor" d="M2,2h3v1h1v-1h4v1h1v-1h3v8h-5.5v2h1.5v1h4v1h-4v1h-4v-1h-4v-1h4v-1h1.5v-2h-5.5zM7,14h2v-1h-2zM12,3v1h-3v-1h-2v1h-3v-1h-1v2h10v-2zM13,6h-4.5v1h4.5zM13,8h-2v1h2zM10,9v-1h-4v1zM5,9v-1h-2v1zM3,7h4.5v-1h-4.5z"/></symbol><use href="#icon-gui-line-firewall-firewall"/></svg></div></div><div class="card-row-label">Network — host + method</div></div><div class="card-row"><div class="symbol frame-none" style="width: 34.0px; height: 34.0px; --frame-fill: transparent; --frame-stroke: transparent; --frame-stroke-width: 1.5; --art-color: #76B900; --inset: 0.0px"><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><title>Process — Seccomp rules</title><symbol id="icon-gui-line-check-check" viewBox="0 0 16 16"><path fill="currentColor" d="M14.354,4.354l-8.354,8.353l-4.354,-4.353l0.708,-0.708l3.646,3.647l7.647,-7.647z"/></symbol><use href="#icon-gui-line-check-check"/></svg></div></div><div class="card-row-label">Process — Seccomp rules</div></div><div class="card-row"><div class="symbol frame-none" style="width: 34.0px; height: 34.0px; --frame-fill: transparent; --frame-stroke: transparent; --frame-stroke-width: 1.5; --art-color: #76B900; --inset: 0.0px"><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><title>Inference — provider route</title><symbol id="icon-gui-line-route-route" viewBox="0 0 16 16"><path fill="currentColor" d="M11.642,9.939c-0.337,0.426 -0.728,0.783 -1.142,1.13c-0.414,-0.347 -0.805,-0.704 -1.142,-1.13c-0.391,-0.494 -0.858,-1.241 -0.858,-2.057c0,-1.007 0.921,-1.882 2,-1.882c1.079,0 2,0.875 2,1.882c0,0.816 -0.467,1.563 -0.858,2.058M10.5,7c-0.578,0 -1,0.477 -1,0.882c0,0.464 0.283,0.983 0.642,1.437c0.124,0.157 0.25,0.295 0.358,0.408c0.109,-0.113 0.234,-0.251 0.358,-0.408c0.359,-0.454 0.642,-0.973 0.642,-1.437c0,-0.405 -0.422,-0.882 -1,-0.882"/><path fill="currentColor" d="M14.5,1.779v10.568l-4.47,1.676l-4.03,-1.008l-4.5,1.125v-11.03l4.53,-1.133l3.97,1.49zM2.5,9.707v3.153l3.5,-0.875l3.97,0.992l3.53,-1.323v-8.432l-3.5,1.312l-4.03,-1.511l-3.47,0.867v4.403l1.5,-1.5l2,2l0.793,-0.793h1.207v1h-0.793l-1.207,1.207l-2,-2z"/></symbol><use href="#icon-gui-line-route-route"/></svg></div></div><div class="card-row-label">Inference — provider route</div></div></div><div class="card-detail">The checked-in policy is the reviewable source of authority</div></div></div>
+<div class="diagram-node node-metric" data-diagram-node data-id="decision" style="left: 930.0px; top: 390.0px; width: 245.0px; height: 190.0px; --metric-color: #76B900"><div class="metric-value">MATCH?</div><div class="metric-label">Policy decision</div><div class="metric-detail">Identity + operation + target + current policy</div></div>
+<div class="diagram-node node-metric" data-diagram-node data-id="evidence" style="left: 760.0px; top: 775.0px; width: 405.0px; height: 140.0px; --metric-color: #80868B"><div class="metric-value">EVIDENCE</div><div class="metric-label">OpenShell logs / OCSF export</div><div class="metric-detail">Decision, target, source, timing — never treat silence as proof</div></div>
+<div class="diagram-node node-card" data-diagram-node data-id="allow" style="left: 1340.0px; top: 255.0px; width: 465.0px; height: 315.0px"><div class="card-shell" style="--card-fill: #FBFFF6; --card-stroke: #76B900; --card-radius: 12.0px; --card-stroke-width: 1.3px"><div class="card-title">ALLOW — Least Privilege</div><div class="card-symbol"><div class="symbol frame-none" style="width: 56.0px; height: 56.0px; --frame-fill: #FBFFF6; --frame-stroke: #76B900; --frame-stroke-width: 1.5; --art-color: #76B900; --inset: 0.0px"><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><title>ALLOW — Least Privilege</title><symbol id="allow-gui-line-check-circle-check-circle" viewBox="0 0 16 16"><path fill="currentColor" d="M4.146,7.854l0.708,-0.708l2.146,2.147l4.147,-4.147l0.707,0.708l-4.854,4.853z"/><path fill="currentColor" d="M8,1c3.86599,0 7,3.13401 7,7c0,3.86599 -3.13401,7 -7,7c-3.86599,0 -7,-3.13401 -7,-7c0,-3.86599 3.13401,-7 7,-7M2,8c0,3.31371 2.68629,6 6,6c3.31371,0 6,-2.68629 6,-6c0,-3.31371 -2.68629,-6 -6,-6c-3.31371,0 -6,2.68629 -6,6"/></symbol><use href="#allow-gui-line-check-circle-check-circle"/></svg></div></div></div><div class="card-items"><div class="card-pill">Only the matched operation proceeds</div><div class="card-pill">Inference placeholders resolve on the trusted host</div><div class="card-pill">Result returns to the sandbox</div></div><div class="card-detail">Authority stays narrow and observable</div></div></div>
+<div class="diagram-node node-card" data-diagram-node data-id="deny" style="left: 1340.0px; top: 605.0px; width: 465.0px; height: 315.0px"><div class="card-shell" style="--card-fill: #FFF8F3; --card-stroke: #E85B00; --card-radius: 12.0px; --card-stroke-width: 1.3px"><div class="card-title">DENY — Stop Before Access</div><div class="card-symbol"><div class="symbol frame-none" style="width: 56.0px; height: 56.0px; --frame-fill: #FFF8F3; --frame-stroke: #E85B00; --frame-stroke-width: 1.5; --art-color: #E85B00; --inset: 0.0px"><div class="symbol-art"><svg class="mark-svg" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><title>DENY — Stop Before Access</title><symbol id="deny-gui-line-shield-off-shield-off" viewBox="0 0 16 16"><path fill="currentColor" d="M1.354,0.646l13,13l-0.707,0.708l-2.033,-2.033c-0.90348,1.07571 -2.12752,1.83403 -3.493,2.164l-0.121,0.03l-0.121,-0.03c-3.26,-0.815 -4.717,-3.533 -5.362,-5.917c-0.27368,-1.0431 -0.4412,-2.1112 -0.5,-3.188c-0.02,-0.338 -0.029,-0.67667 -0.027,-1.016c0.003,-0.3 0.015,-0.468 0.032,-0.754l0.695,-0.186l-2.07,-2.07zM3.534,4.241l-0.544,0.145c-0.002,0.226 0.003,0.547 0.025,0.937c0.045,0.798 0.167,1.87 0.468,2.984c0.596,2.208 1.86,4.455 4.517,5.176c1.14111,-0.30232 2.1575,-0.95752 2.904,-1.872zM13.483,8.568c-0.138,0.51 -0.313,1.034 -0.534,1.552l-0.768,-0.768c0.13,-0.346 0.242,-0.69433 0.336,-1.045c0.301,-1.113 0.423,-2.186 0.468,-2.984c0.023,-0.39 0.027,-0.711 0.025,-0.937l-5.01,-1.342l-1.678,0.45l-0.817,-0.817l2.495,-0.668l5.978,1.601c0.015,0.252 0.03,0.502 0.032,0.754c0.002,0.245 -0.002,0.594 -0.026,1.016c-0.05913,1.07684 -0.22699,2.14493 -0.501,3.188"/></symbol><use href="#deny-gui-line-shield-off-shield-off"/></svg></div></div></div><div class="card-items"><div class="card-pill">No undeclared resource access</div><div class="card-pill">No credential or provider egress</div><div class="card-pill">Denial is an expected test outcome</div></div><div class="card-detail">Fix the policy or the request — do not bypass the boundary</div></div></div>
+    </section>
+  </main>
+  <script>const EDGE_DATA = [{"from": "agent", "to": "request", "fromAnchor": "s", "toAnchor": "n", "color": "#1D9BD7", "label": "proposes action"}, {"points": [[365, 838], [500, 838], [500, 755], [718, 755], [718, 725]], "color": "#444444", "label": "route governed access", "labelX": 610, "labelY": 744}, {"from": "policy", "to": "decision", "fromAnchor": "e", "toAnchor": "w", "color": "#76B900", "label": "evaluate"}, {"from": "decision", "to": "allow", "fromAnchor": "e", "toAnchor": "w", "color": "#76B900", "label": "declared match"}, {"points": [[1175, 485], [1250, 485], [1250, 762], [1340, 762]], "color": "#E85B00", "label": "no match \u2192 deny", "labelX": 1250, "labelY": 710}, {"from": "decision", "to": "evidence", "fromAnchor": "s", "toAnchor": "n", "route": "vh", "midY": 745, "color": "#80868B", "style": "dashed", "label": "record decision", "labelX": 1110, "labelY": 735}];
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function relRect(el, origin) {
+  const r = el.getBoundingClientRect();
+  return {
+    x: r.left - origin.left,
+    y: r.top - origin.top,
+    w: r.width,
+    h: r.height,
+    cx: r.left - origin.left + r.width / 2,
+    cy: r.top - origin.top + r.height / 2,
+    left: r.left - origin.left,
+    right: r.left - origin.left + r.width,
+    top: r.top - origin.top,
+    bottom: r.top - origin.top + r.height
+  };
+}
+
+function findNode(id) {
+  return [...document.querySelectorAll("[data-diagram-node]")].find((el) => el.dataset.id === id);
+}
+
+function anchor(rect, side, other) {
+  let chosen = side || "auto";
+  if (chosen === "auto") {
+    const dx = other.cx - rect.cx;
+    const dy = other.cy - rect.cy;
+    if (Math.abs(dx) >= Math.abs(dy)) chosen = dx >= 0 ? "e" : "w";
+    else chosen = dy >= 0 ? "s" : "n";
+  }
+  if (chosen === "n") return { x: rect.cx, y: rect.top };
+  if (chosen === "s") return { x: rect.cx, y: rect.bottom };
+  if (chosen === "e") return { x: rect.right, y: rect.cy };
+  if (chosen === "w") return { x: rect.left, y: rect.cy };
+  return { x: rect.cx, y: rect.cy };
+}
+
+function routedPoints(edge, a, b) {
+  if (Array.isArray(edge.points) && edge.points.length) {
+    return edge.points.map((p) => Array.isArray(p) ? { x: p[0], y: p[1] } : { x: p.x, y: p.y });
+  }
+  const route = edge.route || "auto";
+  const dx = Math.abs(b.x - a.x);
+  const dy = Math.abs(b.y - a.y);
+  if (route === "straight") return [a, b];
+  if (route === "vh" || (route === "auto" && dy > dx * 1.4)) {
+    const midY = edge.midY ?? ((a.y + b.y) / 2);
+    return [a, { x: a.x, y: midY }, { x: b.x, y: midY }, b];
+  }
+  if (route === "hv" || route === "auto") {
+    const midX = edge.midX ?? ((a.x + b.x) / 2);
+    return [a, { x: midX, y: a.y }, { x: midX, y: b.y }, b];
+  }
+  if (route === "hvh") {
+    const midX = edge.midX ?? ((a.x + b.x) / 2);
+    return [a, { x: midX, y: a.y }, { x: midX, y: b.y }, b];
+  }
+  if (route === "vhv") {
+    const midY = edge.midY ?? ((a.y + b.y) / 2);
+    return [a, { x: a.x, y: midY }, { x: b.x, y: midY }, b];
+  }
+  return [a, b];
+}
+
+function roundedPath(points, radius = 12) {
+  if (!points.length) return "";
+  if (points.length < 3 || radius <= 0) {
+    return "M " + points.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" L ");
+  }
+  const out = [`M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`];
+  for (let i = 1; i < points.length - 1; i++) {
+    const p0 = points[i - 1], p1 = points[i], p2 = points[i + 1];
+    const vin = { x: p1.x - p0.x, y: p1.y - p0.y };
+    const vout = { x: p2.x - p1.x, y: p2.y - p1.y };
+    const lin = Math.max(Math.hypot(vin.x, vin.y), 1);
+    const lout = Math.max(Math.hypot(vout.x, vout.y), 1);
+    const r = Math.min(radius, lin / 2, lout / 2);
+    const before = { x: p1.x - vin.x / lin * r, y: p1.y - vin.y / lin * r };
+    const after = { x: p1.x + vout.x / lout * r, y: p1.y + vout.y / lout * r };
+    out.push(`L ${before.x.toFixed(1)} ${before.y.toFixed(1)}`);
+    out.push(`Q ${p1.x.toFixed(1)} ${p1.y.toFixed(1)} ${after.x.toFixed(1)} ${after.y.toFixed(1)}`);
+  }
+  const last = points[points.length - 1];
+  out.push(`L ${last.x.toFixed(1)} ${last.y.toFixed(1)}`);
+  return out.join(" ");
+}
+
+function drawConnectors() {
+  const canvas = document.querySelector(".canvas");
+  const svg = document.querySelector(".connectors");
+  const defs = svg.querySelector("defs");
+  svg.replaceChildren(defs);
+  const origin = canvas.getBoundingClientRect();
+  window.__diagramIssues = [];
+
+  for (const edge of EDGE_DATA) {
+    let points = [];
+    if (edge.points) {
+      points = routedPoints(edge, null, null);
+    } else {
+      const fromEl = findNode(edge.from);
+      const toEl = findNode(edge.to);
+      if (!fromEl || !toEl) {
+        window.__diagramIssues.push(`missing edge endpoint: ${edge.from} -> ${edge.to}`);
+        continue;
+      }
+      const fromRect = relRect(fromEl, origin);
+      const toRect = relRect(toEl, origin);
+      const a = anchor(fromRect, edge.fromAnchor, toRect);
+      const b = anchor(toRect, edge.toAnchor, fromRect);
+      points = routedPoints(edge, a, b);
+    }
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("class", "connector");
+    path.setAttribute("d", roundedPath(points, edge.rounded === false ? 0 : (edge.radius ?? 12)));
+    path.setAttribute("stroke", edge.color || (edge.green ? "#76B900" : "#80868B"));
+    path.setAttribute("stroke-width", edge.strokeWidth || 1.55);
+    if (edge.style === "dashed") path.setAttribute("stroke-dasharray", edge.dash || "7 6");
+    if (edge.arrowStart || edge.bidirectional) path.setAttribute("marker-start", "url(#arrow-start)");
+    if (edge.arrowEnd !== false) path.setAttribute("marker-end", "url(#arrow)");
+    svg.appendChild(path);
+
+    if (edge.label) {
+      const mid = points[Math.floor(points.length / 2)];
+      const text = document.createElementNS(SVG_NS, "text");
+      text.setAttribute("class", "connector-label");
+      text.setAttribute("x", edge.labelX ?? mid.x);
+      text.setAttribute("y", edge.labelY ?? mid.y);
+      text.textContent = edge.label;
+      svg.appendChild(text);
+    }
+  }
+}
+
+async function ready() {
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  drawConnectors();
+  window.__diagramReady = true;
+}
+
+window.addEventListener("resize", () => drawConnectors());
+ready();</script>
+</body>
+</html>

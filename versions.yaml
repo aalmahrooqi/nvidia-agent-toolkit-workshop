@@ -1,0 +1,283 @@
+# Source-backed version contract for NemoClaw/OpenShell training.
+#
+# `managed_stack` is the compatibility unit used by course sandboxes.
+# `standalone_observations` records newer upstream releases for comparison only;
+# those values must never override a NemoClaw-managed sandbox component.
+# Existing automation continues to read runtime.*, cli_tools.*, and python.*.
+
+metadata:
+  verified_date: "2026-07-10"
+  managed_policy: "Install and validate the NemoClaw LKG as one compatibility unit; never mix in newer standalone agent or OpenShell releases."
+  standalone_policy: "Informational upstream observations only, except host-optional Ollama; never install these versions into a NemoClaw-managed sandbox."
+
+managed_stack:
+  nemoclaw:
+    version: "0.0.79"
+    release_ref: "v0.0.79"
+    source_url: "https://github.com/NVIDIA/NemoClaw/tree/v0.0.79"
+    verified_date: "2026-07-10"
+    notes: "Last-known-good release and course compatibility root."
+  openshell:
+    version: "0.0.72"
+    release_ref: "v0.0.72"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/nemoclaw-blueprint/blueprint.yaml"
+    verified_date: "2026-07-10"
+    notes: "NemoClaw v0.0.79 requires this exact OpenShell version."
+  openclaw:
+    version: "2026.6.10"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/openclaw/manifest.yaml"
+    verified_date: "2026-07-10"
+    notes: "Image-pinned by the managed OpenClaw manifest; rebuild instead of updating in place."
+  hermes:
+    version: "0.17.0"
+    release_ref: "v2026.6.19"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/hermes/manifest.yaml"
+    verified_date: "2026-07-10"
+    notes: "The managed CLI reports semver 0.17.0; the corresponding upstream release tag is calendar-versioned."
+  langchain_deepagents_code:
+    version: "0.1.34"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/langchain-deepagents-code/manifest.yaml"
+    verified_date: "2026-07-10"
+    notes: "Hash-locked terminal agent exposed through the nemo-deepagents alias."
+
+managed_inference_profiles:
+  dgx_spark:
+    runtime_image: "nvcr.io/nvidia/vllm:26.05.post1-py3"
+    default_model: "nvidia/Qwen3.6-35B-A3B-NVFP4"
+    provider: "vllm-local"
+    course_coverage: "implemented-needs-live-uat"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/src/lib/inference/vllm.ts"
+    verified_date: "2026-07-10"
+    notes: "Primary local-inference path in the DGX Spark branch; exact image, model, provider, and route are statically checked."
+  dgx_station:
+    runtime_image: "nvcr.io/nvidia/vllm:26.05.post1-py3"
+    default_model: "deepseek-ai/DeepSeek-V4-Flash"
+    provider: "vllm-local"
+    course_coverage: "not-implemented"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/src/lib/inference/vllm.ts"
+    verified_date: "2026-07-10"
+    notes: "Supported upstream profile but not currently represented by a course platform branch."
+  linux_nvidia_gpu:
+    runtime_image: "nvcr.io/nvidia/vllm:26.03.post1-py3"
+    default_model: "nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8"
+    provider: "vllm-local"
+    course_coverage: "not-implemented"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/src/lib/inference/vllm.ts"
+    verified_date: "2026-07-10"
+    notes: "Supported generic Linux NVIDIA-GPU profile; installation remains experimental-gated upstream and has no course branch."
+
+standalone_observations:
+  openshell:
+    version: "0.0.80"
+    release_ref: "v0.0.80"
+    source_url: "https://github.com/NVIDIA/OpenShell/releases/tag/v0.0.80"
+    verified_date: "2026-07-10"
+    notes: "Standalone latest; incompatible with the NemoClaw v0.0.79 exact 0.0.72 gate."
+  openclaw:
+    version: "2026.6.11"
+    source_url: "https://www.npmjs.com/package/openclaw/v/2026.6.11"
+    verified_date: "2026-07-10"
+    notes: "Stable npm release; beta dist-tags are intentionally ignored."
+  hermes:
+    version: "0.18.2"
+    release_ref: "v2026.7.7.2"
+    source_url: "https://github.com/NousResearch/hermes-agent/releases/tag/v2026.7.7.2"
+    verified_date: "2026-07-10"
+    notes: "Standalone CLI semver and corresponding calendar-versioned release tag."
+  deepagents_code:
+    version: "0.1.36"
+    source_url: "https://pypi.org/project/deepagents-code/0.1.36/"
+    verified_date: "2026-07-10"
+    notes: "Standalone Deep Agents Code release; managed sandboxes remain on 0.1.34."
+  deepagents_python:
+    version: "0.6.12"
+    source_url: "https://pypi.org/project/deepagents/0.6.12/"
+    verified_date: "2026-07-10"
+    notes: "Standalone Python SDK package."
+  deepagents_javascript:
+    version: "1.10.7"
+    source_url: "https://www.npmjs.com/package/deepagents/v/1.10.7"
+    verified_date: "2026-07-10"
+    notes: "Standalone JavaScript SDK package."
+  pi:
+    version: "0.80.6"
+    source_url: "https://www.npmjs.com/package/@earendil-works/pi-coding-agent/v/0.80.6"
+    verified_date: "2026-07-10"
+    notes: "Standalone Pi coding agent under the current Earendil Works scope."
+  ollama:
+    version: "0.31.2"
+    release_ref: "v0.31.2"
+    source_url: "https://github.com/ollama/ollama/releases/tag/v0.31.2"
+    verified_date: "2026-07-10"
+    notes: "Host-optional local provider; do not install it inside a managed sandbox."
+
+runtime:
+  docker:
+    pinned: "28.0"
+    min: null
+    source_url: "https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/get-started/prerequisites"
+    verified_date: "2026-07-10"
+    notes: "Course reference environment uses Docker 28.x. Upstream requires a tested Docker Engine, Docker Desktop, or Colima path but publishes no numeric minimum, so validation checks availability instead of inventing a version floor."
+  node:
+    pinned: "24.18.0"
+    min: "22.16"
+    source_url: "https://nodejs.org/en/blog/release/v24.18.0"
+    verified_date: "2026-07-10"
+    notes: "Current LTS for authoring; NemoClaw's supported product minimum remains 22.16. Pin enforced through .nvmrc."
+  python:
+    pinned: "3.13"
+    min: "3.12"
+    source_url: "https://pypi.org/project/nvidia-nat/1.8.0/"
+    verified_date: "2026-07-10"
+    notes: "Notebook runtime. Keep requires-python <3.14 because nvidia-nat 1.8.0 requires Python below 3.14."
+
+cli_tools:
+  nemoclaw:
+    source: "installer-env"
+    compatibility_scope: "nemoclaw-managed"
+    source_url: "https://github.com/NVIDIA/NemoClaw/tree/v0.0.79"
+    verified_date: "2026-07-10"
+    install_tag: "v0.0.79"
+    expected_version: "0.0.79"
+    env_var: "NEMOCLAW_INSTALL_TAG"
+    install_url: "https://www.nvidia.com/nemoclaw.sh"
+    notes: "Course LKG. All managed component pins below come from this release."
+  openshell:
+    source: "bundled-with-nemoclaw"
+    compatibility_scope: "nemoclaw-managed"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/nemoclaw-blueprint/blueprint.yaml"
+    verified_date: "2026-07-10"
+    expected_version_range:
+      min: "0.0.72"
+      max: "0.0.72"
+    notes: "Exact managed compatibility gate. Standalone 0.0.80 is informational only."
+  openclaw:
+    source: "bundled-with-nemoclaw"
+    compatibility_scope: "nemoclaw-managed"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/openclaw/manifest.yaml"
+    verified_date: "2026-07-10"
+    expected_version: "2026.6.10"
+    notes: "Image-pinned managed runtime. Validate read-only; use NemoClaw rebuild/re-onboard on mismatch and never npm-upgrade it in place."
+  hermes:
+    source: "bundled-with-nemoclaw"
+    compatibility_scope: "nemoclaw-managed"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/hermes/manifest.yaml"
+    verified_date: "2026-07-10"
+    expected_version: "0.17.0"
+    notes: "Managed manifest semver corresponding to upstream release tag v2026.6.19."
+  deepagents_code:
+    source: "bundled-with-nemoclaw"
+    compatibility_scope: "nemoclaw-managed"
+    source_url: "https://github.com/NVIDIA/NemoClaw/blob/v0.0.79/agents/langchain-deepagents-code/manifest.yaml"
+    verified_date: "2026-07-10"
+    expected_version: "0.1.34"
+    notes: "Hash-locked LangChain Deep Agents Code runtime exposed through nemo-deepagents."
+  deepagents_npm:
+    source: "npm"
+    compatibility_scope: "standalone-observation"
+    source_url: "https://www.npmjs.com/package/deepagents/v/1.10.7"
+    verified_date: "2026-07-10"
+    expected_version: "1.10.7"
+    notes: "Standalone JavaScript SDK metadata only; not installed by course automation."
+  deepagents_python:
+    source: "pypi"
+    compatibility_scope: "standalone-observation"
+    source_url: "https://pypi.org/project/deepagents/0.6.12/"
+    verified_date: "2026-07-10"
+    expected_version: "0.6.12"
+    notes: "Standalone Python SDK metadata only; not installed by course automation."
+  pi:
+    source: "npm"
+    compatibility_scope: "standalone-observation"
+    source_url: "https://www.npmjs.com/package/@earendil-works/pi-coding-agent/v/0.80.6"
+    verified_date: "2026-07-10"
+    expected_version: "0.80.6"
+    notes: "Standalone Pi metadata only; current package scope is @earendil-works."
+  ollama:
+    source: "installer-env"
+    compatibility_scope: "host-optional"
+    source_url: "https://github.com/ollama/ollama/releases/tag/v0.31.2"
+    verified_date: "2026-07-10"
+    install_version: "0.31.2"
+    expected_version: "0.31.2"
+    env_var: "OLLAMA_VERSION"
+    install_url: "https://ollama.com/install.sh"
+    notes: "Optional host-side local provider for compatibility labs; never install inside the managed sandbox."
+
+python:
+  jupyterlab:
+    pinned: "4.6.1"
+    min: "4.6.1"
+    source_url: "https://pypi.org/project/jupyterlab/4.6.1/"
+    verified_date: "2026-07-10"
+    notes: "Notebook authoring environment."
+  ipykernel:
+    pinned: "7.3.0"
+    min: "7.3.0"
+    source_url: "https://pypi.org/project/ipykernel/7.3.0/"
+    verified_date: "2026-07-10"
+    notes: "Jupyter kernel used for course notebooks."
+  pydantic:
+    pinned: "2.13.4"
+    min: "2.13"
+    source_url: "https://pypi.org/project/pydantic/2.13.4/"
+    verified_date: "2026-07-10"
+    notes: "Schema validation for manifests and status files."
+  ipywidgets:
+    pinned: "8.1.8"
+    min: "8.1"
+    source_url: "https://pypi.org/project/ipywidgets/8.1.8/"
+    verified_date: "2026-07-10"
+    notes: "Interactive widgets in notebooks."
+  pytest:
+    pinned: "9.1.1"
+    min: "9.1.1"
+    source_url: "https://pypi.org/project/pytest/9.1.1/"
+    verified_date: "2026-07-10"
+    notes: "Developer test runner."
+  ruff:
+    pinned: "0.15.21"
+    min: "0.15.21"
+    source_url: "https://github.com/astral-sh/ruff/releases/tag/0.15.21"
+    verified_date: "2026-07-10"
+    notes: "Python linting and formatting tool; pre-commit uses the same release."
+  nvidia_nat:
+    pinned: "1.8.0"
+    min: "1.8.0"
+    source_url: "https://pypi.org/project/nvidia-nat/1.8.0/"
+    verified_date: "2026-07-10"
+    notes: "Optional direct-OpenShell lab dependency; requires Python <3.14."
+
+javascript:
+  playwright:
+    pinned: "1.61.1"
+    min: "1.61.1"
+    source_url: "https://www.npmjs.com/package/@playwright/test/v/1.61.1"
+    verified_date: "2026-07-10"
+    notes: "Browser-based rendering and course smoke tests; package.json and package-lock.json must match."
+  glob:
+    pinned: "13.0.6"
+    min: "13.0.6"
+    source_url: "https://www.npmjs.com/package/glob/v/13.0.6"
+    verified_date: "2026-07-10"
+    notes: "Notebook inventory expansion used by the Playwright smoke suite."
+
+tooling:
+  uv:
+    pinned: "0.11.28"
+    min: "0.11.0"
+    source_url: "https://github.com/astral-sh/uv/releases/tag/0.11.28"
+    verified_date: "2026-07-10"
+    notes: "Authoring environment and lockfile manager; installation remains external to the project environment."
+  pre_commit:
+    pinned: "4.6.0"
+    min: "4.6.0"
+    source_url: "https://pypi.org/project/pre-commit/4.6.0/"
+    verified_date: "2026-07-10"
+    notes: "Developer hook runner installed through the dev extra."
+  pre_commit_hooks:
+    pinned: "6.0.0"
+    min: "6.0.0"
+    source_url: "https://github.com/pre-commit/pre-commit-hooks/releases/tag/v6.0.0"
+    verified_date: "2026-07-10"
+    notes: "Repository hook collection pinned in .pre-commit-config.yaml."
