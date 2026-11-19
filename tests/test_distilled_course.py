@@ -114,6 +114,16 @@ def test_bootstrap_keeps_the_api_key_out_of_jupyter_and_off_disk():
     assert "set CLAW_JUPYTER_TOKEN before exposing JupyterLab" in script
 
 
+def test_bootstrap_hands_the_key_between_users_on_stdin_only():
+    script = (REPO_ROOT / "launchable" / "bootstrap.sh").read_text(encoding="utf-8")
+    passthrough = re.search(r'^passthrough_env="([^"]+)"', script, re.MULTILINE).group(1)
+    assert "NVIDIA_API_KEY" not in passthrough.split(",")
+    assert "--key-stdin" in script
+    # The value must never be interpolated into a command line or echoed.
+    assert not re.search(r"env\s+NVIDIA_API_KEY=", script)
+    assert not re.search(r"echo[^\n]*\$\{?NVIDIA_API_KEY", script)
+
+
 def test_setup_script_reads_pins_that_exist():
     versions = yaml.safe_load((REPO_ROOT / "versions.yaml").read_text(encoding="utf-8"))
     script = (REPO_ROOT / "setup.sh").read_text(encoding="utf-8")

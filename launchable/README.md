@@ -90,6 +90,7 @@ The Launchable docs leave these open, and `bootstrap.sh` is written to cope with
 
 | Question | Where to look | If it goes wrong |
 |---|---|---|
+| Did the API key reach the script? | "Bootstrap context" prints `NVIDIA_API_KEY: set` or `NOT set` for each user | If the first one says `NOT set`, the launch parameter is missing or misnamed; it must be exactly `NVIDIA_API_KEY`. The error message also shows how to finish the instance by hand. |
 | Which user runs the setup script? | "Bootstrap context" at the top of the setup log | Set `CLAW_USER` in the snippet if the login user is not `ubuntu`. |
 | Can that user run Docker without `sudo`? | `setup.sh` reports "Docker daemon is answering" | Add the user to the `docker` group in the snippet before calling `bootstrap.sh`. |
 | Does the Secure Link reach a service bound to loopback? | Open the JupyterLab link | Set `CLAW_JUPYTER_IP=0.0.0.0` together with `CLAW_JUPYTER_TOKEN`; the script refuses a non-loopback address without a token. |

@@ -39,7 +39,7 @@
 
 set -euo pipefail
 
-passthrough_env="NVIDIA_API_KEY,CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_TOKEN,CLAW_MODEL,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE"
+passthrough_env="CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_TOKEN,CLAW_MODEL,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE"
 
 step() { printf '\n==> %s\n' "$1"; }
 ok() { printf '    OK: %s\n' "$1"; }
@@ -61,9 +61,22 @@ if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
   fi
 fi
 
+# The root-to-user handoff below sends the key on stdin (see there for why).
+if [[ "${1:-}" == "--key-stdin" ]]; then
+  shift
+  IFS= read -r NVIDIA_API_KEY || true
+  export NVIDIA_API_KEY
+  exec </dev/null
+fi
+
+# Only whether the key arrived is ever printed, never its value. Seeing this
+# line for each user in the setup log shows where a missing key was lost.
+key_state="NOT set"
+[[ -n "${NVIDIA_API_KEY:-}" ]] && key_state="set"
+
 step "Bootstrap context"
-printf '    user: %s\n    directory: %s\n    script checkout: %s\n' \
-  "$(id -un)" "$(pwd)" "${own_root:-none}"
+printf '    user: %s\n    directory: %s\n    script checkout: %s\n    NVIDIA_API_KEY: %s\n' \
+  "$(id -un)" "$(pwd)" "${own_root:-none}" "${key_state}"
 
 # --------------------------------------------------------------------------
 # Started as root: install for the login user instead, then stop.
@@ -94,6 +107,14 @@ if [[ "${EUID}" -eq 0 ]]; then
   fi
 
   step "Continuing as ${target_user}"
+  if [[ -n "${NVIDIA_API_KEY:-}" ]]; then
+    # Hand the key over on stdin. That keeps it out of process argument lists
+    # and off disk, and does not depend on sudo being allowed to preserve it.
+    printf '%s\n' "${NVIDIA_API_KEY}" |
+      sudo -H -u "${target_user}" --preserve-env="${passthrough_env}" \
+        bash "${course_dir}/launchable/bootstrap.sh" --key-stdin "$@"
+    exit 0
+  fi
   exec sudo -H -u "${target_user}" --preserve-env="${passthrough_env}" \
     bash "${course_dir}/launchable/bootstrap.sh" "$@"
 fi
@@ -197,8 +218,22 @@ case "${1:-}" in
     ;;
 esac
 
-[[ -n "${NVIDIA_API_KEY:-}" ]] ||
-  fail "NVIDIA_API_KEY is not set. Define it as a required launch parameter on the Launchable."
+if [[ -z "${NVIDIA_API_KEY:-}" ]]; then
+  cat >&2 <<EOF
+
+ERROR: NVIDIA_API_KEY did not reach this script.
+
+  On a Launchable: add a launch parameter named exactly NVIDIA_API_KEY
+  (Required, Type "Text"), then deploy again and fill it in when prompted.
+  The "Bootstrap context" lines above show whether Brev passed it in.
+
+  To finish this instance without redeploying, run these in a terminal on it:
+
+    read -rs NVIDIA_API_KEY && export NVIDIA_API_KEY
+    ${course_dir}/launchable/bootstrap.sh
+EOF
+  exit 1
+fi
 
 # --------------------------------------------------------------------------
 # Host tools the Brev VM does not ship
