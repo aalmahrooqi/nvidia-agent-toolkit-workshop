@@ -25,7 +25,7 @@ Launchable runs and the settings to enter in the builder.
 | Default hardware configuration | A CPU instance type. No GPU is needed because inference is hosted. Use at least 4 vCPUs and 16 GB of RAM, and set "Disk Storage (GiB)" to 100 or more for the sandbox images. |
 | Software configuration | **VM Mode**. Leave Brev's own Jupyter off; `bootstrap.sh` starts JupyterLab with the course's packages. Paste the snippet below as the setup script. |
 | Source | "I don't have any code files". The setup script clones the repository itself, so it does not depend on where Brev would place a clone. |
-| Network | A **Secure Link** on port `8888` for JupyterLab. Optionally a second one on port `18789` for the OpenClaw dashboard. |
+| Network | A **Secure Link** on port `3000` for the workshop site and one on port `8888` for JupyterLab. Optionally a third on port `18789` for the OpenClaw dashboard. |
 | Launch parameters | Name `NVIDIA_API_KEY`, Required, Type "Text", no default. Deployers are prompted for it and can choose "Use a secret" instead of pasting a key. |
 | View access | "Only my organization" or "Anyone with the link". |
 
@@ -62,6 +62,12 @@ checkout at `~/claw-training-distilled` in the login user's home.
 4. Runs [`setup.sh`](../setup.sh): pinned NemoClaw install, the `agent` sandbox, first inference.
 5. Registers the course's Python environment as the `python3` Jupyter kernel.
 6. Starts JupyterLab on `127.0.0.1:8888`, rooted at the course directory.
+7. Starts the workshop site on `127.0.0.1:3000`: lessons beside a live shell, with graded
+   checks. See [`web/`](../web/).
+
+Both services give whoever reaches them a shell on the VM. They bind to loopback and rely on
+the Secure Link for login; neither will bind to another address unless you set a token
+(`CLAW_JUPYTER_TOKEN`, `CLAW_WEB_TOKEN`).
 
 The API key is passed to `setup.sh` and then dropped. It is not written to disk and is removed
 from JupyterLab's environment; OpenShell holds it from onboarding onward.
@@ -71,10 +77,11 @@ from JupyterLab's environment; OpenShell holds it from onboarding onward.
 - Open the JupyterLab Secure Link and start with
   `tracks/01-concepts-architecture/01_concepts.ipynb`.
 - Launch parameters are not supplied again after an instance restart, and the setup script does
-  not re-run. NemoClaw and the sandbox persist; bring JupyterLab back with:
+  not re-run. NemoClaw and the sandbox persist; bring the two services back with:
 
   ```bash
   ~/claw-training-distilled/launchable/bootstrap.sh --jupyter-only
+  ~/claw-training-distilled/launchable/bootstrap.sh --web-only
   ```
 
 ## Things to confirm on the first test deploy

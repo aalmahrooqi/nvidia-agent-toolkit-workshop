@@ -77,6 +77,29 @@ sandbox already exist, it only re-verifies.
 uv run jupyter lab tracks/01-concepts-architecture/01_concepts.ipynb
 ```
 
+### Workshop site
+
+The whole course is also available as a web site: each lesson on the left, a live shell on the
+host beside it. Learners run commands with one click, get graded checks, and can chat with the
+agent without leaving the page.
+
+```bash
+uv run python -m web.server      # then open http://127.0.0.1:3000
+```
+
+- **Lessons** are Markdown files in [`web/lessons/`](web/lessons/), converted from the
+  notebooks. A `bash` block gets a "Run in shell" button. A `check` block becomes a graded
+  check whose command runs on the server and is never sent to the page. A `solution` block
+  renders collapsed.
+- **The shell** starts in `lab/`, a scratch folder for the policy files and exercises learners
+  write. It has `$CLAW_SANDBOX` set and no `NVIDIA_API_KEY`.
+- **`claw`** ([`web/lab.py`](web/lab.py)) is a small helper on the shell's PATH for steps that
+  take more than one CLI call, such as creating a sandbox and waiting until it is Ready.
+- **The server** is one Python process with no build step. It serves a shell on the host, so
+  it binds to loopback and refuses any other address unless `CLAW_WEB_TOKEN` is set.
+
+The notebooks in `tracks/` remain the source the lessons were converted from.
+
 ### Deploy as a Brev Launchable
 
 To hand learners a one-click environment instead, publish the course as a
@@ -110,6 +133,7 @@ Two things differ in substance, not just in packaging:
 claw-training-distilled/
 ├── setup.sh                 # Run first: install, onboard, first inference
 ├── launchable/              # Brev Launchable setup script and builder settings
+├── web/                     # Workshop site: Markdown lessons, live shell, graded checks
 ├── tracks/                  # Course content (7 notebooks)
 │   ├── 01-concepts-architecture/
 │   ├── 02-openshell-runtime/

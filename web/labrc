@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Startup file for the lab shell in the workshop page (see web/server.py).
+# The server sets CLAW_SANDBOX, CLAW_WORKSPACE, and CLAW_COURSE_DIR, puts
+# ~/.local/bin on PATH, and removes NVIDIA_API_KEY from the environment.
+
+: "${CLAW_SANDBOX:=agent}"
+export CLAW_SANDBOX
+
+PS1='\[\e[1;32m\]claw-lab\[\e[0m\]:\[\e[1;34m\]\W\[\e[0m\]\$ '
+
+printf '\e[1;32mClaw Training lab shell\e[0m\n'
+if command -v openshell >/dev/null 2>&1 && command -v nemoclaw >/dev/null 2>&1; then
+  printf '  sandbox: \e[1m%s\e[0m (available as $CLAW_SANDBOX)\n' "${CLAW_SANDBOX}"
+else
+  printf '  \e[33mnemoclaw and openshell are not installed yet.\e[0m Run ./setup.sh first.\n'
+fi
+printf '  Use "Run in shell" on any command in the lesson, or type here.\n\n'

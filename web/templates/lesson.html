@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ lesson.title }} · Claw Training</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
+</head>
+<body data-lesson="{{ lesson.slug }}">
+  <header class="topbar">
+    <span class="brand">Claw Training</span>
+    <label class="picker">
+      <span class="picker-label">Lesson</span>
+      <select id="lesson-picker" aria-label="Go to lesson">
+        {% for number, item in enumerate(lessons, start=1) %}
+        <option value="/learn/{{ item.slug }}"{% if item.slug == lesson.slug %} selected{% end %}>{{ number }}. {{ item.title }}</option>
+        {% end %}
+      </select>
+    </label>
+    <nav class="steps" aria-label="Lesson order">
+      {% if previous %}<a href="/learn/{{ previous.slug }}" title="{{ previous.title }}">← Previous</a>{% end %}
+      {% if following %}<a href="/learn/{{ following.slug }}" title="{{ following.title }}">Next →</a>{% end %}
+    </nav>
+  </header>
+
+  <main class="split">
+    <article class="lesson">
+      <p class="eyebrow">
+        Lesson {{ position }} of {{ total }}{% if lesson.minutes %} · about {{ lesson.minutes }} minutes{% end %}
+      </p>
+      <h1>{{ lesson.title }}</h1>
+      {% if lesson.subtitle %}<p class="subtitle">{{ lesson.subtitle }}</p>{% end %}
+
+      {% raw lesson.html %}
+
+      <nav class="pager" aria-label="Lesson order">
+        {% if previous %}<a href="/learn/{{ previous.slug }}">← {{ previous.title }}</a>{% else %}<span></span>{% end %}
+        {% if following %}<a href="/learn/{{ following.slug }}">{{ following.title }} →</a>{% end %}
+      </nav>
+    </article>
+
+    <aside class="shell" aria-label="Lab shell">
+      <div class="shell-bar">
+        <span class="shell-title">Lab shell</span>
+        <span id="shell-status" class="shell-status" role="status">connecting</span>
+        <button type="button" id="shell-reconnect" class="btn btn-quiet">New shell</button>
+      </div>
+      <div id="terminal"></div>
+    </aside>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+  <script src="{{ static_url('app.js') }}"></script>
+</body>
+</html>

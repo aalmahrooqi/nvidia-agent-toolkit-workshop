@@ -37,3 +37,6 @@ htmlcov/
 
 # Ruff
 .ruff_cache/
+
+# Learner files written from the workshop shell
+lab/

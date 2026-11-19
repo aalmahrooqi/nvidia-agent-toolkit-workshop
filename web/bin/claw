@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# `claw` for the workshop's lab shell and graded checks. See web/lab.py.
+set -euo pipefail
+course_dir="${CLAW_COURSE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+python="${CLAW_PYTHON:-${course_dir}/.venv/bin/python}"
+PYTHONPATH="${course_dir}${PYTHONPATH:+:${PYTHONPATH}}" exec "${python}" -m web.lab "$@"

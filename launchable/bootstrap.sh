@@ -31,11 +31,15 @@
 #   CLAW_JUPYTER_PORT   JupyterLab port (default: 8888).
 #   CLAW_JUPYTER_IP     Address JupyterLab binds to (default: 127.0.0.1).
 #   CLAW_JUPYTER_TOKEN  JupyterLab token. Required when CLAW_JUPYTER_IP is not loopback.
+#   CLAW_START_WEB      Set to 0 to skip starting the workshop site (web/).
+#   CLAW_WEB_PORT       Workshop site port (default: 3000).
+#   CLAW_WEB_HOST       Address the workshop site binds to (default: 127.0.0.1).
+#   CLAW_WEB_TOKEN      Workshop site token. Required when CLAW_WEB_HOST is not loopback.
 #   CLAW_MODEL, CLAW_FORCE_INSTALL, CLAW_SKIP_INFERENCE  Passed through to setup.sh.
 
 set -euo pipefail
 
-passthrough_env="NVIDIA_API_KEY,CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_MODEL,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE"
+passthrough_env="NVIDIA_API_KEY,CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_TOKEN,CLAW_MODEL,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE"
 
 step() { printf '\n==> %s\n' "$1"; }
 ok() { printf '    OK: %s\n' "$1"; }
@@ -155,11 +159,43 @@ start_jupyter() {
   fail "JupyterLab did not start within 60 seconds."
 }
 
-if [[ "${1:-}" == "--jupyter-only" ]]; then
-  command -v uv >/dev/null 2>&1 || fail "uv is not installed; run the full bootstrap first."
-  start_jupyter
-  exit 0
-fi
+web_port="${CLAW_WEB_PORT:-3000}"
+web_host="${CLAW_WEB_HOST:-127.0.0.1}"
+web_log="${HOME}/claw-workshop.log"
+
+start_web() {
+  step "Starting the workshop site on ${web_host}:${web_port}"
+
+  # Any HTTP answer counts, including a 403 from the token gate.
+  if curl -sS -o /dev/null "http://127.0.0.1:${web_port}/" 2>/dev/null; then
+    ok "something already answers on port ${web_port}; leaving it running"
+    return
+  fi
+
+  # The site serves a shell. It refuses a non-loopback address without
+  # CLAW_WEB_TOKEN, and it runs without the API key like JupyterLab does.
+  CLAW_WEB_HOST="${web_host}" CLAW_WEB_PORT="${web_port}" \
+    env -u NVIDIA_API_KEY setsid nohup uv run python -m web.server \
+    >"${web_log}" 2>&1 </dev/null &
+
+  for _ in $(seq 1 15); do
+    if curl -sS -o /dev/null "http://127.0.0.1:${web_port}/" 2>/dev/null; then
+      ok "workshop site is answering; log: ${web_log}"
+      return
+    fi
+    sleep 2
+  done
+  tail -n 20 "${web_log}" >&2 || true
+  fail "The workshop site did not start within 30 seconds."
+}
+
+case "${1:-}" in
+  --jupyter-only | --web-only)
+    command -v uv >/dev/null 2>&1 || fail "uv is not installed; run the full bootstrap first."
+    if [[ "$1" == "--jupyter-only" ]]; then start_jupyter; else start_web; fi
+    exit 0
+    ;;
+esac
 
 [[ -n "${NVIDIA_API_KEY:-}" ]] ||
   fail "NVIDIA_API_KEY is not set. Define it as a required launch parameter on the Launchable."
@@ -245,6 +281,10 @@ if [[ "${CLAW_START_JUPYTER:-1}" == "1" ]]; then
   start_jupyter
 fi
 
+if [[ "${CLAW_START_WEB:-1}" == "1" ]]; then
+  start_web
+fi
+
 cat <<EOF
 
 Launchable bootstrap complete.
@@ -252,7 +292,8 @@ Launchable bootstrap complete.
   Course directory: ${course_dir}
   First notebook:   tracks/01-concepts-architecture/01_concepts.ipynb
 
-After an instance restart, bring JupyterLab back with:
+After an instance restart, bring the services back with:
 
   ${course_dir}/launchable/bootstrap.sh --jupyter-only
+  ${course_dir}/launchable/bootstrap.sh --web-only
 EOF
