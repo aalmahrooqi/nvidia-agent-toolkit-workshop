@@ -87,6 +87,9 @@ agent without leaving the page.
 uv run python -m web.server      # then open http://127.0.0.1:3000
 ```
 
+- **Setup happens in the page.** The first lesson asks for your NVIDIA API key in the shell
+  (hidden input) and runs `setup.sh` for you, so running `./setup.sh` beforehand is optional.
+  The key goes only to that one setup run; it is not stored or exported.
 - **Lessons** are Markdown files in [`web/lessons/`](web/lessons/), converted from the
   notebooks. A `bash` block gets a "Run in shell" button. A `check` block becomes a graded
   check whose command runs on the server and is never sent to the page. A `solution` block

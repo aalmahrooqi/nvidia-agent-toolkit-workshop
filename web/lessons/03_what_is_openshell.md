@@ -17,7 +17,7 @@ By the end of this lesson, you will be able to:
 
 ## Before you start
 
-Run `./setup.sh` from the course directory first; it creates the course sandbox. The shell on the right is a real shell on the course host. Every command block has a **Run in shell** button, and `$CLAW_SANDBOX` holds the name of the course sandbox.
+Complete [Set Up Your Environment](/learn/setup) first; it creates the course sandbox. The shell on the right is a real shell on the course host. Every command block has a **Run in shell** button, and `$CLAW_SANDBOX` holds the name of the course sandbox.
 
 
 ---
@@ -118,11 +118,11 @@ echo "$CLAW_SANDBOX"
 task: "OpenShell lists the course sandbox and reports it as Ready."
 command: |
   openshell sandbox list | awk -v name="$CLAW_SANDBOX" 'NR > 1 && $1 == name' | grep -q Ready
-hint: "Look at the Phase column. If the sandbox is missing, rerun `./setup.sh`."
+hint: "Look at the Phase column. If the sandbox is missing, run `claw setup --force`."
 success: "The course sandbox is Ready."
 ```
 
-You should see at least one course sandbox. The standard course name is `agent`. Older DGX Spark setups may still show `training-sandbox` until you rerun `./setup.sh`. The **Phase** column tells you whether it is ready to use.
+You should see at least one course sandbox. The standard course name is `agent`. Older DGX Spark setups may still show `training-sandbox` until you run `claw setup --force`. The **Phase** column tells you whether it is ready to use.
 
 ### Execute a Command Inside a Sandbox
 
@@ -331,7 +331,7 @@ openshell provider list
 task: "OpenShell has at least one inference provider configured."
 command: |
   [ "$(openshell provider list | awk 'NR > 1 && NF' | wc -l)" -ge 1 ]
-hint: "Onboarding creates the provider. If the list is empty, rerun `./setup.sh`."
+hint: "Onboarding creates the provider. If the list is empty, run `claw setup --force`."
 success: "A provider is registered with the gateway."
 ```
 
@@ -418,7 +418,7 @@ Verify the OpenShell runtime before moving on.
 
 1. **Check:** `openshell sandbox list` shows the course sandbox as Ready.
    - **Expected:** one row with Phase `Ready` for the sandbox that `setup.sh` created.
-   - **If not working:** rerun `./setup.sh` from the repository root.
+   - **If not working:** run `claw setup --force`.
 
 2. **Check:** `openshell provider list` shows a configured inference provider.
    - **Expected:** at least one provider row (for example `ollama-local` on DGX Spark or `nvidia-prod` on Brev).
@@ -426,7 +426,7 @@ Verify the OpenShell runtime before moving on.
 
 3. **Check:** the policy get output contains the four policy domains this lesson introduced.
    - **Expected:** the output shows `filesystem`, `network`, `process`, and `inference` sections.
-   - **If not working:** rerun `openshell policy get` from section 5; if it still fails, your sandbox is not Ready and you should rerun `./setup.sh`.
+   - **If not working:** rerun `openshell policy get` from section 5; if it still fails, your sandbox is not Ready and you should run `claw setup --force`.
 
 ---
 

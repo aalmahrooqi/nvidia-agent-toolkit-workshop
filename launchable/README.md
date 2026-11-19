@@ -26,7 +26,7 @@ Launchable runs and the settings to enter in the builder.
 | Software configuration | **VM Mode**. Leave Brev's own Jupyter off; `bootstrap.sh` starts JupyterLab with the course's packages. Paste the snippet below as the setup script. |
 | Source | "I don't have any code files". The setup script clones the repository itself, so it does not depend on where Brev would place a clone. |
 | Network | A **Secure Link** on port `3000` for the workshop site and one on port `8888` for JupyterLab. Optionally a third on port `18789` for the OpenClaw dashboard. |
-| Launch parameters | Name `NVIDIA_API_KEY`, Required, Type "Text", no default. Deployers are prompted for it and can choose "Use a secret" instead of pasting a key. |
+| Launch parameters | Optional. Add `NVIDIA_API_KEY` (Type "Text", not Required, no default) if you want deployers to be able to supply a key at launch. Without it, each learner enters their own key in the site's first lesson. |
 | View access | "Only my organization" or "Anyone with the link". |
 
 Leave the parameter's default empty. The Launchable docs warn against storing reusable
@@ -59,7 +59,9 @@ checkout at `~/claw-training-distilled` in the login user's home.
    NemoClaw, uv, and Node.js install under a user's home, so they must belong to the user who
    opens JupyterLab.
 3. Installs uv and the Node.js release pinned in `.nvmrc` if they are missing.
-4. Runs [`setup.sh`](../setup.sh): pinned NemoClaw install, the `agent` sandbox, first inference.
+4. If a key was supplied at launch, runs [`setup.sh`](../setup.sh): pinned NemoClaw install, the
+   `agent` sandbox, first inference. If not, it skips this step; the learner runs it from the
+   workshop site's "Set Up Your Environment" lesson, which asks for the key in the page's shell.
 5. Registers the course's Python environment as the `python3` Jupyter kernel.
 6. Starts JupyterLab on `127.0.0.1:8888`, rooted at the course directory.
 7. Starts the workshop site on `127.0.0.1:3000`: lessons beside a live shell, with graded

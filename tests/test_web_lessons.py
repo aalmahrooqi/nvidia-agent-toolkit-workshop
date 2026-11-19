@@ -19,6 +19,7 @@ LESSON_DIR = REPO_ROOT / "web" / "lessons"
 LESSONS = {lesson.slug: lesson for lesson in load_lessons(LESSON_DIR)}
 
 EXPECTED_ORDER = [
+    "setup",
     "concepts",
     "architecture",
     "what-is-openshell",
@@ -241,3 +242,94 @@ def test_claw_launcher_runs_from_any_directory(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert "sandbox-create" in result.stdout
+
+
+# ---- claw setup -------------------------------------------------------------
+
+FAKE_KEY = "nvapi-" + "T3stOnlyKeyValue0123456789"
+FAKE_SETUP = """#!/usr/bin/env bash
+echo "KEY_LENGTH=${#NVIDIA_API_KEY}"
+echo "ARGS=$#"
+echo "Setup complete."
+"""
+
+
+class _Terminal:
+    def isatty(self):
+        return True
+
+
+class _Pipe:
+    def isatty(self):
+        return False
+
+
+@pytest.fixture
+def setup_env(tmp_path, monkeypatch):
+    course = tmp_path / "course"
+    course.mkdir()
+    script = course / "setup.sh"
+    script.write_text(FAKE_SETUP, encoding="utf-8")
+    script.chmod(script.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CLAW_COURSE_DIR", str(course))
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.setattr(lab, "course_is_set_up", lambda: False)
+    monkeypatch.setattr(lab.sys, "stdin", _Terminal())
+    return tmp_path
+
+
+def test_setup_passes_the_key_only_through_the_environment(setup_env, monkeypatch, capsys):
+    monkeypatch.setattr(lab.getpass, "getpass", lambda prompt: f"  {FAKE_KEY}\n")
+
+    assert lab.main(["setup"]) == 0
+
+    output = capsys.readouterr().out
+    assert f"KEY_LENGTH={len(FAKE_KEY)}" in output
+    assert "ARGS=0" in output
+    assert "Setup complete." in output
+    assert FAKE_KEY not in output
+    assert FAKE_KEY not in (setup_env / "claw-setup.log").read_text(encoding="utf-8")
+    assert not (setup_env / ".claw-setup.pid").exists()
+    assert "NVIDIA_API_KEY" not in os.environ
+
+
+def test_setup_rejects_a_value_that_is_not_a_key(setup_env, monkeypatch, capsys):
+    monkeypatch.setattr(lab.getpass, "getpass", lambda prompt: "not-a-key")
+    monkeypatch.setattr(lab.subprocess, "Popen", lambda *a, **k: pytest.fail("setup.sh started"))
+
+    assert lab.main(["setup"]) == 1
+    assert "not an nvapi- key" in capsys.readouterr().out
+    assert not (setup_env / "claw-setup.log").exists()
+
+
+def test_setup_does_nothing_when_the_course_is_already_set_up(setup_env, monkeypatch, capsys):
+    monkeypatch.setattr(lab, "course_is_set_up", lambda: True)
+    monkeypatch.setattr(lab.getpass, "getpass", lambda prompt: pytest.fail("asked for a key"))
+
+    assert lab.main(["setup"]) == 0
+    assert "Already set up" in capsys.readouterr().out
+
+
+def test_setup_force_reruns_even_when_already_set_up(setup_env, monkeypatch, capsys):
+    monkeypatch.setattr(lab, "course_is_set_up", lambda: True)
+    monkeypatch.setattr(lab.getpass, "getpass", lambda prompt: FAKE_KEY)
+
+    assert lab.main(["setup", "--force"]) == 0
+    assert "Setup complete." in capsys.readouterr().out
+
+
+def test_setup_reports_a_failed_run(setup_env, monkeypatch, capsys):
+    script = setup_env / "course" / "setup.sh"
+    script.write_text("#!/usr/bin/env bash\necho boom\nexit 7\n", encoding="utf-8")
+    monkeypatch.setattr(lab.getpass, "getpass", lambda prompt: FAKE_KEY)
+
+    assert lab.main(["setup"]) == 7
+    assert "boom" in capsys.readouterr().out
+
+
+def test_setup_needs_a_terminal(setup_env, monkeypatch, capsys):
+    monkeypatch.setattr(lab.sys, "stdin", _Pipe())
+
+    assert lab.main(["setup"]) == 1
+    assert "needs a terminal" in capsys.readouterr().out

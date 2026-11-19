@@ -9,6 +9,8 @@
 #   1. picks the login user and puts the course checkout in that user's home
 #   2. installs uv and the pinned Node.js release if they are missing
 #   3. runs ./setup.sh (NemoClaw install, `agent` sandbox, first inference)
+#      when NVIDIA_API_KEY was supplied; otherwise learners enter their own
+#      key in the workshop site's Setup lesson
 #   4. registers the course's Python environment as the Jupyter `python3` kernel
 #   5. starts JupyterLab on the course directory
 #
@@ -23,7 +25,8 @@
 #   launchable/bootstrap.sh --jupyter-only  # only (re)start JupyterLab, e.g. after a restart
 #
 # Environment:
-#   NVIDIA_API_KEY      Required. Define it as a required launch parameter.
+#   NVIDIA_API_KEY      Optional. Supply it as a launch parameter to install at
+#                       launch; leave it out and learners run `claw setup`.
 #   CLAW_REPO_URL       Git URL to clone when this script is not run from a checkout.
 #   CLAW_USER           Login user to install for when started as root (default: ubuntu).
 #   CLAW_COURSE_DIR     Checkout location (default: ~/claw-training-distilled).
@@ -218,23 +221,6 @@ case "${1:-}" in
     ;;
 esac
 
-if [[ -z "${NVIDIA_API_KEY:-}" ]]; then
-  cat >&2 <<EOF
-
-ERROR: NVIDIA_API_KEY did not reach this script.
-
-  On a Launchable: add a launch parameter named exactly NVIDIA_API_KEY
-  (Required, Type "Text"), then deploy again and fill it in when prompted.
-  The "Bootstrap context" lines above show whether Brev passed it in.
-
-  To finish this instance without redeploying, run these in a terminal on it:
-
-    read -rs NVIDIA_API_KEY && export NVIDIA_API_KEY
-    ${course_dir}/launchable/bootstrap.sh
-EOF
-  exit 1
-fi
-
 # --------------------------------------------------------------------------
 # Host tools the Brev VM does not ship
 # --------------------------------------------------------------------------
@@ -301,7 +287,12 @@ ok "node $(node --version)"
 # --------------------------------------------------------------------------
 # The course's own setup: NemoClaw, the `agent` sandbox, first inference
 # --------------------------------------------------------------------------
-./setup.sh
+if [[ -n "${NVIDIA_API_KEY:-}" ]]; then
+  ./setup.sh
+else
+  step "No NVIDIA_API_KEY supplied; leaving the NemoClaw install to the learner"
+  ok "the workshop site's Setup lesson asks for a key and runs setup.sh"
+fi
 
 # --------------------------------------------------------------------------
 # Jupyter
@@ -326,6 +317,9 @@ Launchable bootstrap complete.
 
   Course directory: ${course_dir}
   First notebook:   tracks/01-concepts-architecture/01_concepts.ipynb
+
+If no API key was supplied at launch, open the workshop site (port ${web_port}) and
+follow its first lesson, "Set Up Your Environment".
 
 After an instance restart, bring the services back with:
 

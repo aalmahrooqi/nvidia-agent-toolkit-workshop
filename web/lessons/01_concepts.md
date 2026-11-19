@@ -100,7 +100,7 @@ This sequence is more useful than memorizing commands. It makes the architecture
 
 | Course area | Main question |
 |---|---|
-| Setup — `setup.sh` | Can I reach first inference on this host? |
+| [Setup](/learn/setup) | Can I reach first inference on this host? |
 | OpenShell lessons | Which boundary proves least privilege? |
 | NemoClaw lesson | How is the managed deployment operated? |
 | Integration lessons | Can a constrained agent deliver a real outcome? |

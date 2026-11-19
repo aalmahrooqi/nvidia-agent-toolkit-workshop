@@ -153,7 +153,7 @@ Walk one failure through the architecture:
 
 ## Next Steps
 
-If you have not run it yet, run `./setup.sh` from the repository root. It installs the pinned stack, creates the `agent` sandbox, and proves first inference.
+If you have not done it yet, complete [Set Up Your Environment](/learn/setup). It installs the pinned stack, creates the `agent` sandbox, and proves first inference.
 
 Then continue to **[What Is OpenShell?](/learn/what-is-openshell)** to start working with the sandbox runtime.
 

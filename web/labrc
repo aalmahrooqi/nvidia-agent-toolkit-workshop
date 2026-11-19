@@ -14,6 +14,6 @@ printf '\e[1;32mClaw Training lab shell\e[0m\n'
 if command -v openshell >/dev/null 2>&1 && command -v nemoclaw >/dev/null 2>&1; then
   printf '  sandbox: \e[1m%s\e[0m (available as $CLAW_SANDBOX)\n' "${CLAW_SANDBOX}"
 else
-  printf '  \e[33mnemoclaw and openshell are not installed yet.\e[0m Run ./setup.sh first.\n'
+  printf '  \e[33mnemoclaw and openshell are not installed yet.\e[0m Run: claw setup\n'
 fi
 printf '  Use "Run in shell" on any command in the lesson, or type here.\n\n'

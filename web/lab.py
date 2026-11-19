@@ -16,7 +16,11 @@ and returns a process exit code.
 """
 
 import argparse
+import getpass
 import importlib
+import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -25,6 +29,10 @@ from pathlib import Path
 import yaml
 
 COMMAND_MODULES = ("web.lab_agents",)
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+API_KEY_RE = re.compile(r"nvapi-[A-Za-z0-9_-]{16,}")
+SETUP_DONE_MARKER = "Setup complete."
 
 FS_EXERCISE_READ_ONLY = {"/usr", "/sandbox/reference"}
 FS_EXERCISE_READ_WRITE = {"/sandbox/work"}
@@ -68,7 +76,7 @@ def cmd_nvidia_provider(args: argparse.Namespace) -> int:
     if not name:
         print(
             "No NVIDIA-backed provider found. Expected nvidia-inference, nvidia-prod, or "
-            "nvidia-nim. Rerun ./setup.sh from the course directory.",
+            "nvidia-nim. Run `claw setup --force`.",
             file=sys.stderr,
         )
         return 1
@@ -120,6 +128,103 @@ def cmd_sandbox_create(args: argparse.Namespace) -> int:
         time.sleep(2)
     print(f"Sandbox {args.name} did not become Ready within {args.timeout}s.", file=sys.stderr)
     return 1
+
+
+def _setup_paths() -> tuple[Path, Path]:
+    return Path.home() / "claw-setup.log", Path.home() / ".claw-setup.pid"
+
+
+def _running_setup_pid(pid_file: Path) -> int | None:
+    try:
+        pid = int(pid_file.read_text(encoding="utf-8").strip())
+        os.kill(pid, 0)
+    except (OSError, ValueError):
+        return None
+    return pid
+
+
+def _is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _follow_setup(log: Path, pid: int, process: subprocess.Popen | None = None) -> int:
+    """Print the setup log as it grows until setup ends. Returns its exit code."""
+    with log.open("r", encoding="utf-8", errors="replace") as stream:
+        while True:
+            chunk = stream.read()
+            if chunk:
+                print(chunk, end="", flush=True)
+                continue
+            finished = process.poll() is not None if process else not _is_alive(pid)
+            if finished:
+                print(stream.read(), end="", flush=True)
+                break
+            time.sleep(0.5)
+    if process is not None:
+        return process.returncode
+    # Re-attached to a run this process did not start, so judge by its log.
+    return 0 if SETUP_DONE_MARKER in log.read_text(encoding="utf-8", errors="replace") else 1
+
+
+def course_is_set_up() -> bool:
+    """True when the course sandbox already exists on this host."""
+    if not shutil.which("openshell"):
+        return False
+    sandbox = os.environ.get("CLAW_SANDBOX", "agent")
+    try:
+        return any(row[0] == sandbox for row in _sandbox_rows())
+    except (RuntimeError, OSError, subprocess.SubprocessError):
+        return False
+
+
+def cmd_setup(args: argparse.Namespace) -> int:
+    """Ask for the NVIDIA API key and run setup.sh with it, detached from this shell."""
+    log, pid_file = _setup_paths()
+    course_dir = Path(os.environ.get("CLAW_COURSE_DIR") or REPO_ROOT)
+
+    running = _running_setup_pid(pid_file)
+    if running:
+        print(f"Setup is already running; following {log}.\n")
+        return _follow_setup(log, running)
+
+    if not args.force and course_is_set_up():
+        print("Already set up: the course sandbox exists. Run `claw setup --force` to redo it.")
+        return 0
+
+    if not sys.stdin.isatty():
+        print("claw setup needs a terminal so it can read the key without echoing it.")
+        return 1
+    key = getpass.getpass("Paste your NVIDIA API key (input stays hidden), then press Enter: ")
+    key = key.strip()
+    if not API_KEY_RE.fullmatch(key):
+        print("That is not an nvapi- key. Nothing was started; run `claw setup` to try again.")
+        return 1
+
+    # The key goes only into the environment of this one setup.sh run. It is not
+    # exported to the shell, written to disk, or passed on a command line.
+    # start_new_session detaches the run, so leaving this page does not stop it.
+    with log.open("wb") as output:
+        process = subprocess.Popen(
+            [str(course_dir / "setup.sh")],
+            cwd=course_dir,
+            env={**os.environ, "NVIDIA_API_KEY": key},
+            stdin=subprocess.DEVNULL,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    del key
+    pid_file.write_text(str(process.pid), encoding="utf-8")
+    print("Setup started. Leaving this page will not stop it; run `claw setup` to watch again.\n")
+    try:
+        return _follow_setup(log, process.pid, process)
+    finally:
+        if process.poll() is not None:
+            pid_file.unlink(missing_ok=True)
 
 
 def cmd_policy_add(args: argparse.Namespace) -> int:
@@ -205,6 +310,10 @@ def cmd_check_fs_policy(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="claw", description="Lab helpers for the workshop shell.")
     subparsers = parser.add_subparsers(dest="command", required=True, metavar="command")
+
+    setup = subparsers.add_parser("setup", help="ask for the NVIDIA API key and install the course")
+    setup.add_argument("--force", action="store_true", help="run again even if already set up")
+    setup.set_defaults(func=cmd_setup)
 
     create = subparsers.add_parser("sandbox-create", help="create a sandbox and wait until Ready")
     create.add_argument("name")

@@ -55,7 +55,7 @@ openshell sandbox list
 ```check
 task: The course sandbox is listed by OpenShell and is Ready.
 command: openshell sandbox list | awk -v name="$CLAW_SANDBOX" 'NR > 1 && $1 == name' | grep -q Ready
-hint: Look at the Phase column of `openshell sandbox list`. If the sandbox is missing, rerun `./setup.sh`.
+hint: Look at the Phase column of `openshell sandbox list`. If the sandbox is missing, run `claw setup --force`.
 success: OpenShell reports the course sandbox as Ready.
 ```
 
