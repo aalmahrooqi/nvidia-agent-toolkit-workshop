@@ -36,20 +36,19 @@ The managed course unit is NemoClaw `v0.0.145`, OpenShell `0.0.116`, and OpenCla
 ## Course Map
 
 Course 1, *Agents from Scratch*, is eight lessons under
-[`web/courses/01_agents/`](web/courses/01_agents/). Course 2 is nine lessons under
+[`web/courses/01_agents/`](web/courses/01_agents/). Course 2 is eight lessons under
 [`web/courses/02_claw/`](web/courses/02_claw/):
 
 | Lesson | What you do | Time |
 |---|---|---|
 | 1. From Your Agent to an Agent Harness | Name what you built in Course 1, see what a full-size harness adds, and place OpenShell and NemoClaw around it | 20m |
 | 2. Set Up Your Environment | Install the pinned stack, create the `agent` sandbox, prove first inference | 10m |
-| 3. Concepts | Learn what each layer owns and why they are separate | 25m |
-| 4. Architecture | Trace the gateway, sandbox, trust boundaries, and inference path | 35m |
-| 5. What Is OpenShell? | Drive the sandbox runtime from its CLI | 30m |
-| 6. Sandbox Policies | Write a filesystem, process, and network policy, then prove each domain | 55m |
-| 7. NemoClaw with OpenClaw | Inspect the managed deployment across its three control planes | 45m |
-| 8. NASA APOD | Review, permit, and deploy your first API-backed skill | 25m |
-| 9. Daily Financial Briefing | Build a multi-API agent with a custom persona | 40m |
+| 3. Architecture of the Managed Stack | Learn what each layer owns, then trace the gateway, sandbox, trust boundaries, and inference path | 30m |
+| 4. What Is OpenShell? | Drive the sandbox runtime from its CLI | 30m |
+| 5. Sandbox Policies | Write a filesystem, process, and network policy, then prove each domain | 55m |
+| 6. NemoClaw with OpenClaw | Inspect the managed deployment across its three control planes | 45m |
+| 7. NASA APOD | Review, permit, and deploy your first API-backed skill | 25m |
+| 8. Daily Financial Briefing | Build a multi-API agent with a custom persona | 40m |
 
 Run them in order: each one assumes the one before it.
 
@@ -163,11 +162,11 @@ starts the workshop site.
 |---|---|
 | From Your Agent to an Agent Harness | New in this repository; not taken from the full course |
 | `setup.sh` | Replaces the Module 2 onboarding notebooks for one platform path |
-| Concepts, Architecture | Module 1, unchanged apart from cross-references |
-| What Is OpenShell? | Module 4, unchanged apart from cross-references |
-| Sandbox Policies | Module 4's filesystem, network, process, and inference policy notebooks, merged |
-| NemoClaw with OpenClaw | Module 5's three OpenClaw-branch notebooks, merged |
-| NASA APOD, Daily Financial Briefing | Module 6, unchanged apart from cross-references |
+| Architecture of the Managed Stack | Module 1's Concepts and Architecture notebooks, merged into one reading lesson with the repeated prose removed |
+| What Is OpenShell? | Module 4, with prose repeated elsewhere in the course removed; every cell and check kept |
+| Sandbox Policies | Module 4's filesystem, network, process, and inference policy notebooks, merged; prose repeated elsewhere in the course removed, every cell and check kept |
+| NemoClaw with OpenClaw | Module 5's three OpenClaw-branch notebooks, merged; prose repeated elsewhere in the course removed, every cell and check kept |
+| NASA APOD, Daily Financial Briefing | Module 6, with prose repeated elsewhere in the course removed; every cell and check kept |
 
 Two things differ in substance, not just in packaging:
 

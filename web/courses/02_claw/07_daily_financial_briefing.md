@@ -50,18 +50,11 @@ the SKILL.md.
 | **Open-Meteo** | Weather for a configurable city | None | `api.open-meteo.com` |
 | **Nager.Date** | Upcoming US public holidays | None | `date.nager.at` |
 
-### What Makes This Impressive
-
-- **Multi-source composition** — one skill calls 5 APIs and synthesizes results
-- **Custom personality** — the SOUL.md presents data like a financial analyst
-- **Real live data** — actual Bitcoin prices, exchange rates, and Hacker News stories
-- **Repeatable format** — every run follows the same structure
-
 ---
 
 ## 2. Inspect the Canonical SOUL.md
 
-[SOUL.md](https://docs.openclaw.ai/concepts/soul) defines an agent's tone and behavioral boundaries. This lesson keeps one checked-in persona as the source of truth. Agent verification and creation read those exact bytes; nothing here regenerates the file.
+[SOUL.md](https://docs.openclaw.ai/concepts/soul) defines an agent's tone and behavioral boundaries. As in NASA APOD, the checked-in persona and skill are the source of truth; nothing here regenerates them.
 
 Display the exact financial-analyst persona and its reporting boundaries:
 
@@ -102,9 +95,7 @@ success: The canonical persona matches the exact agent profile.
 
 ## 3. Inspect the Canonical Multi-API SKILL.md
 
-The checked-in skill is the deployable artifact. Validate and display it instead of rebuilding a second copy.
-
-**Expected result:** frontmatter begins on line 1, and the SPDX comment follows the closing delimiter.
+Validate and display the checked-in skill. **Expected result:** frontmatter begins on line 1, and the SPDX comment follows the closing delimiter.
 
 ```bash
 head -n 9 "$CLAW_COURSE_DIR/tracks/04-integrations/skills/daily-briefing/SKILL.md"
@@ -118,15 +109,10 @@ cat "$CLAW_COURSE_DIR/tracks/04-integrations/skills/daily-briefing/SKILL.md"
 
 ## 4. Add Network Policies for All 5 APIs
 
-OpenShell [sandboxes](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes) deny all outbound network traffic by default. Each API
-the agent calls needs an explicit
-[network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) entry that
-specifies the host, port, protocol, and which binaries may initiate the connection.
-The course adds one entry per API — `enforcement: enforce` blocks requests the entry does
-not allow instead of only logging them, and `access: read-only` limits the agent to `GET`,
+OpenShell [sandboxes](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes) deny all outbound network traffic by default, so each API
+the agent calls needs an explicit [network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) entry, and the course adds one per API.
+`access: read-only`, which the NASA APOD entry did not use, limits the agent to `GET`,
 `HEAD`, and `OPTIONS` requests.
-See the full [policy customization guide](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/policies)
-for additional options.
 
 All five entries have this shape. The other four are `frankfurter`, `hackernews`,
 `open_meteo`, and `nager_date`, each with its own host from the table above:
@@ -151,9 +137,8 @@ See which of the five the live base policy already has. This only reads:
 claw agent-policy-status "$CLAW_SANDBOX" financial-analyst
 ```
 
-`claw agent-policy-add` rereads the policy immediately before deciding. Existing names
-are preserved, and only missing course entries may be added after exact target-scoped
-authorization. If any existing entry is not the intended single endpoint with the exact
+As for NASA APOD, `claw agent-policy-add` preserves existing names and adds only missing
+course entries. If any existing entry is not the intended single endpoint with the exact
 executable set, nothing is changed and the live probes wait for an operator's review.
 
 ```bash
@@ -230,16 +215,7 @@ success: Five live sources, each validated before the agent ever sees them.
 
 ## 6. Deploy the Skill to the Market Brief Agent
 
-OpenClaw installs local directories for an exact agent with its native CLI:
-
-```text
-openshell sandbox exec -n agent --no-tty -- \
-  openclaw skills install /sandbox/path/to/daily-briefing --agent financial-analyst
-```
-
-The course helper behind `claw agent-skill-deploy` uploads the canonical source to unique staging, preserves differing existing content, invokes this supported command, verifies the selected agent's skill, and cleans up staging. `--global` is a separate, explicit shared-scope choice.
-
-It deploys only to a verified agent and only after target-scoped authorization:
+`claw agent-skill-deploy` installs the skill the way [NASA APOD](/learn/nasa-apod) section 4 described, this time with `--agent financial-analyst`. It deploys only to a verified agent and only after target-scoped authorization:
 
 ```bash
 export ALLOW_MUTATIONS=1 MUTATION_TARGET="$CLAW_SANDBOX"
@@ -247,13 +223,11 @@ claw agent-skill-deploy "$CLAW_SANDBOX" financial-analyst
 unset ALLOW_MUTATIONS MUTATION_TARGET
 ```
 
-**Expected result:** the helper reports that the skill was installed and verified, or that
-an identical existing skill was preserved, and the command ends with `SKILL_SCOPE_READY`.
-The skill is scoped to the financial-analyst workspace, so the deployment does not alter
-unrelated agent personas. A `SAFE SKIP` or `SAFE MODE` line means no live deployment is
-claimed.
+**Expected result:** as for NASA APOD, the command ends with `SKILL_SCOPE_READY`. The skill
+is scoped to the financial-analyst workspace, so the deployment does not alter unrelated
+agent personas.
 
-If the deploy step reports an unknown agent id, the running gateway has not loaded the new agent yet: run `nemoclaw "$CLAW_SANDBOX" gateway restart` in a cell and rerun it.
+If the deploy step reports an unknown agent id, run `nemoclaw "$CLAW_SANDBOX" gateway restart` in a cell and rerun it.
 
 ```check
 task: The canonical `daily-briefing` skill is installed in the `financial-analyst` agent's workspace and visible to its model.
@@ -324,24 +298,22 @@ openshell sandbox exec -n "$CLAW_SANDBOX" --no-tty -- openclaw cron list
 
 ## Try It Live
 
-Target the exact Market Brief agent, and only once the agent, policy, and skill checks above have passed:
+Target the exact Market Brief agent, and only once the agent, policy, and skill checks above have passed.
 
 ```bash
 nemoclaw "$CLAW_SANDBOX" agent --agent financial-analyst \
   -m "Give me today's morning briefing"
 ```
 
-The reply appears when the turn has finished. If this reports an unknown agent id even though the agent check passed, the running gateway has not loaded the new agent yet: run `nemoclaw "$CLAW_SANDBOX" gateway restart` and send the prompt again. If the cell errors because the gateway is down, check it with `openshell sandbox exec -n "$CLAW_SANDBOX" -- openclaw gateway health`. If it reports `pairing required` or `scope upgrade pending approval`, wait a few seconds and run it again.
+The reply appears when the turn has finished. Only claim that it used current evidence when it contains attributable values. On an unknown agent id, run `nemoclaw "$CLAW_SANDBOX" gateway restart` and send the prompt again. If the gateway is down, check it with `openshell sandbox exec -n "$CLAW_SANDBOX" -- openclaw gateway health`. On `pairing required` or `scope upgrade pending approval`, wait a few seconds and run it again. [NASA APOD](/learn/nasa-apod) section 6 has the longer version. If the briefing is still not working, inspect each probe and run `openclaw skills check --agent financial-analyst` inside the exact sandbox.
 
-Each run with `--agent financial-analyst` continues the same session; nothing resets it automatically. If you need a clean transcript, reset the agent's main session through the host-side NemoClaw lifecycle command; do not send `/new` as if it were an ordinary agent prompt:
+For a clean transcript, reset the agent's main session with the command below. If the reset stops with `scope upgrade pending approval`, approve it the way section 8 describes for scheduling a job.
 
 ```text
 nemoclaw <sandbox> sessions reset agent:financial-analyst:main
 ```
 
-If the reset stops with `scope upgrade pending approval`, approve it the way section 8 describes for scheduling a job.
-
-Wait for the reply above, then print the dashboard address. It carries a sign-in token, so treat it like a password. The dashboard listens on the host the sandbox runs on; to open it from another computer, forward its port first, as the output explains. Then inspect the Market Brief entry in the Dashboard **Sessions** view.
+Wait for the reply above, then print the dashboard address and inspect the Market Brief entry in the Dashboard **Sessions** view. The address carries a sign-in token, so treat it like a password.
 
 ```bash
 claw dashboard-url
@@ -374,35 +346,11 @@ version-controllable.
 
 ---
 
-## Checkpoint
-
-Verify only evidence produced by your path through the lesson.
-
-1. **Check:** the canonical persona matched the exact agent profile.
-   - **Expected:** `claw agent-verify` passes only after workspace, identity, and SOUL verification.
-   - **Conflict:** existing state is preserved and deployment skips.
-
-2. **Check:** every required API rule matched before live probes.
-   - **Expected:** `claw agent-policy-status` reports all five entries, and each probe's response passed its total shape validator.
-   - **Safe mode/conflict:** no complete live-input claim is made.
-
-3. **Check:** the canonical skill was available to the exact agent.
-   - **Expected:** an identical skill was preserved or installed with `--agent financial-analyst` after authorization.
-   - **Conflict:** `claw agent-skill-status` keeps failing and differing content is preserved.
-
-4. **Check:** an optional live agent response used current evidence.
-   - **Expected:** only claim this after the agent and skill checks pass and the response contains attributable values.
-   - **If not working:** inspect each probe and `openclaw skills check --agent financial-analyst` inside the exact sandbox.
-
----
-
-## ✅ What You Accomplished
+## What You Accomplished
 
 - Inspected canonical financial-analyst SOUL and daily-briefing skill sources without rewriting them
 - Verified the exact agent profile before treating it as ready
 - Used total JSON-shape validation for five public data sources
-- Preserved incompatible policies and differing existing workspace skills
-- Distinguished verified live evidence from conflict and safe-mode outcomes
 - Used the pinned exact-agent cron and session-lifecycle command surfaces
 
 ## Next Steps

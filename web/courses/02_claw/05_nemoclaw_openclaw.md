@@ -11,13 +11,7 @@ yourself.
 Every command block is a cell: press **Run** and its output appears underneath. You can
 edit a cell before running it. `$CLAW_SANDBOX` already holds the name of the course sandbox.
 
-## How the layers fit
-
-| Layer | Owns |
-|---|---|
-| **NemoClaw** | The host CLI that installs, configures, and repairs the other two |
-| **OpenShell** | Sandboxing, policy, port forwarding, and inference routing |
-| **OpenClaw** | The agent harness |
+## Four OpenClaw ideas
 
 This course uses [OpenClaw](https://docs.openclaw.ai/start/openclaw) as the harness: a
 general-purpose, always-on assistant. Four ideas are enough to follow the rest of the course:
@@ -38,6 +32,8 @@ Use this pattern when debugging. Each command family answers a different questio
 | `nemoclaw` | Blueprint and lifecycle | What did the managed deployment configure? |
 | `openshell` | Runtime and sandbox | Is the sandbox healthy and what policy applies? |
 | `openclaw` | Agent harness | Is the agent gateway, config, and session state healthy? |
+
+Besides sandboxing and policy, the OpenShell layer owns port forwarding and inference routing.
 
 Ask NemoClaw what it deployed:
 
@@ -231,7 +227,6 @@ conversation with the `main` agent. That is the session idea from
 
 ## What you accomplished
 
-- Verified the default NemoClaw deployment as three cooperating layers: NemoClaw lifecycle, OpenShell runtime, and OpenClaw harness
 - Confirmed OpenClaw runs inside the sandbox with its state under `/sandbox/.openclaw`
 - Inspected the workspace, skills, and session surfaces without changing the environment
 - Read the live OpenShell policy on the managed sandbox

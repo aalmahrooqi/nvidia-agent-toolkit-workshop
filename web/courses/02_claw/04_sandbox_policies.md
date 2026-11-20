@@ -27,8 +27,6 @@ Complete [What Is OpenShell?](/learn/what-is-openshell) first. Policy files you 
 
 Every control in this lesson is enforced by **[OpenShell](https://docs.nvidia.com/openshell/v0.0.116/about/overview)**, not by NemoClaw and not by the agent. OpenShell is the [sandbox](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes) runtime and policy engine: it decides which paths are writable, which user the workload runs as, which hosts, methods, paths, and binaries may send outbound traffic, and how model requests leave the sandbox.
 
-**NemoClaw** provisions and manages the sandbox. **OpenClaw**, the agent harness, runs inside it. If OpenClaw or a shell command steps outside the policy, OpenShell blocks the action first.
-
 A policy file covers four domains:
 
 | Domain | Policy section | Changes on a running sandbox? |
@@ -40,13 +38,9 @@ A policy file covers four domains:
 
 You write the policy in Parts 1–3, create one lab sandbox from it in Part 4, and prove each domain against that sandbox in Part 5.
 
----
-
-## Part 1: Filesystem Policy
-
 ### Why Custom Policies?
 
-The managed sandbox that setup created uses `balanced`, the default. It starts from a NemoClaw policy tier. Current onboarding offers four:
+The managed sandbox that setup created starts from a NemoClaw policy tier. It uses `balanced`, the default. Current onboarding offers four:
 
 | Tier | Default posture | Teaching point |
 |---|---|---|
@@ -57,7 +51,11 @@ The managed sandbox that setup created uses `balanced`, the default. It starts f
 
 A tier is an onboarding choice that expands to concrete service presets. It is not a replacement for the OpenShell policy schema. Filesystem paths, Landlock compatibility, and process controls still live in the sandbox policy itself.
 
-In this lesson you will write a small policy from scratch so you can see that lower-level boundary directly. In a NemoClaw-managed sandbox, use `nemoclaw <name> policy add` for reviewed service presets and reserve raw policy replacement for an explicitly standalone OpenShell lab. The `policy-lab` sandbox you create in Part 4 is that standalone lab; it does not replace the managed `agent` policy.
+In this lesson you will write a small policy from scratch so you can see that lower-level boundary directly. In a NemoClaw-managed sandbox, use `nemoclaw <name> policy add` for reviewed service presets (add `--dry-run` to review one before you apply it) and reserve raw policy replacement for an explicitly standalone OpenShell lab. The `policy-lab` sandbox you create in Part 4 is that standalone lab; it does not replace the managed `agent` policy.
+
+---
+
+## Part 1: Filesystem Policy
 
 ### Default-Deny Posture
 
@@ -71,25 +69,14 @@ access and you grant only what it needs — the principle of least privilege. Se
 [Default Policy reference](https://docs.nvidia.com/openshell/v0.0.116/reference/default-policy) for
 what ships out of the box.
 
-`include_workdir: false` is critical. Setting it to `true` would make the `/sandbox` directory
-writable, which overrides `read_only` entries due to Landlock's union-of-rules behavior (see
-[NemoClaw #804](https://github.com/NVIDIA/NemoClaw/issues/804)).
-
-Every policy file starts with a version marker:
-
-```yaml
-version: 1
-```
-
-All examples in this training use `version: 1`.
-
 ### Building the Filesystem Policy
 
 You'll build the `filesystem_policy` section field by field, starting from a blank section.
 See the [Policy Schema Reference](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema)
 for the full specification of every field used below.
 
-Start with the `include_workdir` setting:
+Every policy file starts with a version marker. All examples in this training use
+`version: 1`. Under it, start with the `include_workdir` setting:
 
 ```yaml
 version: 1
@@ -99,7 +86,10 @@ filesystem_policy:
 ```
 
 Setting `include_workdir` to `false` means the sandbox's working directory (`/sandbox`) is
-NOT automatically writable. You'll explicitly list what's readable and writable.
+NOT automatically writable. This setting is critical: `true` would make the `/sandbox`
+directory writable, which overrides `read_only` entries due to Landlock's union-of-rules
+behavior (see [NemoClaw #804](https://github.com/NVIDIA/NemoClaw/issues/804)). You'll
+explicitly list what's readable and writable.
 
 #### Read-Only Paths
 
@@ -177,39 +167,14 @@ landlock:
 
 [Landlock](https://docs.kernel.org/userspace-api/landlock.html) is a Linux Security Module
 that enforces [filesystem policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema)
-restrictions at the kernel level. Unlike userspace permission checks (which a compromised
-process could bypass), Landlock operates in the kernel, making it tamper-proof from the
-agent's perspective. The `best_effort` compatibility mode keeps your policy working even if
-the host kernel doesn't support every Landlock feature — the recommended setting for broad
-compatibility.
+restrictions at the kernel level, unlike userspace permission checks, which a compromised
+process could bypass. The `best_effort` compatibility mode keeps your policy working even
+if the host kernel doesn't support every Landlock feature — the recommended setting for
+broad compatibility.
 
 > 💡 **How it works:** Landlock enforcement happens *outside* the agent process. Even if the
 > agent is compromised, it cannot modify or disable its filesystem restrictions. This is the
 > same principle you learned in the Architecture lesson's defense model — out-of-process enforcement.
-
-Your complete policy so far (filesystem_policy + landlock):
-
-```yaml
-version: 1
-
-filesystem_policy:
-  include_workdir: false
-  read_only:
-    - /usr
-    - /lib
-    - /proc
-    - /dev/urandom
-    - /app
-    - /etc
-    - /var/log
-    - /sandbox
-  read_write:
-    - /tmp
-    - /dev/null
-
-landlock:
-  compatibility: best_effort
-```
 
 ### Independent Exercise: Design a Least-Privilege Filesystem Policy
 
@@ -287,8 +252,10 @@ system files, install packages, and potentially escape the container. Dropping t
 start. See [Security Best Practices](https://docs.nvidia.com/openshell/v0.0.116/security/best-practices).
 
 **Key constraint:** Neither `run_as_user` nor `run_as_group` may be set to `root` or `0`.
-OpenShell rejects any policy requesting root process identity at creation or update time.
-There is no override. A value you do set must be `sandbox` or a numeric non-root ID.
+OpenShell rejects any policy requesting root process identity with a validation error,
+before the sandbox is created or updated. NemoClaw and OpenClaw never get a chance to run
+because OpenShell blocks the configuration itself. There is no override. A value you do
+set must be `sandbox` or a numeric non-root ID.
 
 ### Building the Process Section
 
@@ -316,9 +283,7 @@ defense-in-depth model introduced in the Architecture lesson.
 
 ### Proof: OpenShell Rejects Root
 
-If a policy sets `run_as_user: root`, applying it fails with a validation error. OpenShell enforces the non-root constraint at the policy-validation layer, before the sandbox is created or updated.
-
-See it live: write a [policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) that requests `root`, then try to create a sandbox from it. NemoClaw and OpenClaw never get a chance to run because OpenShell blocks the configuration itself.
+See it live: write a [policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) that requests `root`, then try to create a sandbox from it.
 
 > The exact wording of the error can change between releases. The non-root rule is a design
 > principle and does not.
@@ -350,13 +315,11 @@ process:
 EOF
 ```
 
-Try to create a sandbox with `root` as its runtime user and treat rejection as success. **Expected result:** OpenShell refuses the policy with an error naming `run_as_user`. This matters because a valid process policy must prevent learners from silently escalating the sandbox identity.
+Try to create a sandbox with `root` as its runtime user and treat rejection as success. **Expected result:** OpenShell refuses the policy, and the error names `run_as_user`. This matters because a valid process policy must prevent learners from silently escalating the sandbox identity.
 
 ```bash
 openshell sandbox create --name root-rejected --policy root-rejected.policy.yaml --no-tty -- sh -lc 'id -un'
 ```
-
-The command fails, and the error names `run_as_user`.
 
 Verify that rejection left no sandbox to clean up. **Expected result:** the read-only inventory does not contain `root-rejected`. This matters because a failed create is not owned by this lesson, so an automatic delete could remove someone else's sandbox after a name collision.
 
@@ -380,8 +343,15 @@ success: "OpenShell refused the policy before any sandbox started."
 
 ### How Network Policies Work
 
-The OpenShell egress proxy intercepts every outbound connection from the sandbox. By default,
-**all outbound connections are blocked** — the same [default-deny](https://docs.nvidia.com/openshell/v0.0.116/reference/default-policy)
+The OpenShell **egress proxy** is a CONNECT proxy that acts as a single choke point for
+network enforcement: it intercepts every outbound connection from the sandbox. Because it
+sits between the sandbox and the network, OpenShell can enforce rules without modifying the
+agent code. The agent uses standard HTTP libraries, so you can sandbox *any* agent — not
+just agents built with OpenShell awareness. See the
+[Architecture documentation](https://docs.nvidia.com/openshell/about/architecture) for
+how the egress proxy fits into the overall system.
+
+By default, **all outbound connections are blocked** — the same [default-deny](https://docs.nvidia.com/openshell/v0.0.116/reference/default-policy)
 posture you applied to the filesystem in Part 1. If an
 endpoint isn't listed in your `network_policies`, the proxy drops the connection.
 
@@ -402,11 +372,9 @@ The proxy terminates TLS automatically to inspect HTTP requests at Layer 7 (meth
 path). That lets the proxy distinguish a `GET /v1/models` request from a
 `POST /v1/fine-tuning/jobs` request — blocking the second while allowing the first.
 
-Network policies are the one dynamic domain: you can update them on a running sandbox
-without restarting it. You'll hot-reload a rule on a running sandbox in Part 5.
-
-([What Is OpenShell?](/learn/what-is-openshell) introduced the split: filesystem and
-process are static; network is dynamic.)
+As [What Is OpenShell?](/learn/what-is-openshell) introduced, network policies are the one
+dynamic domain: you can update them on a running sandbox without restarting it, and you'll
+hot-reload a rule in Part 5.
 
 ### Verify Binary Paths
 
@@ -493,9 +461,6 @@ Each field does:
   The alternative is `audit`, which logs violations without blocking (useful when
   iterating on a new policy)
 
-> 💡 **TLS note:** The proxy terminates TLS automatically for L7 inspection — no
-> configuration needed.
-
 This fragment is not a complete entry yet. OpenShell rejects a `rest` endpoint that has
 neither `rules` nor an `access` preset, because nothing would say which requests it allows.
 
@@ -540,26 +505,12 @@ a predefined set of HTTP methods:
 **When to use presets vs. explicit rules:**
 
 - Use presets for quick configuration when the predefined method sets match your needs
-- Use explicit L7 rules when you need fine-grained control — for example, allowing
-  `POST` to `/v1/chat/completions` but blocking `POST` to `/v1/fine-tuning`
+- Use explicit L7 rules when you need fine-grained control, as in Step 3 above
 
 > 💡 **Tip:** Presets and rules are mutually exclusive on an endpoint. Use `access:` for
 > a preset or `rules:` for explicit L7 rules — not both.
 
-### Egress Proxy and the Sentry.io Example
-
-All outbound traffic from the sandbox goes through the **egress proxy** — a CONNECT proxy
-that acts as a single choke point for network enforcement. Every TCP connection the sandbox
-makes passes through this proxy, which evaluates it against your `network_policies`.
-
-Because the proxy sits between the sandbox and the network, OpenShell can enforce rules
-without modifying the agent code. The agent uses standard HTTP libraries, and the proxy
-transparently intercepts and evaluates every connection. As a result, you can sandbox
-*any* agent — not just agents built with OpenShell awareness. See the
-[Architecture documentation](https://docs.nvidia.com/openshell/about/architecture) for
-how the egress proxy fits into the overall system.
-
-#### A Real-World Example: Sentry.io
+### A Real-World Example: Sentry.io
 
 Sentry is multi-tenant SaaS, so a rule that allows `POST` to sentry.io is a general
 data-exfiltration channel: a compromised agent could send arbitrary data to a Sentry
@@ -682,8 +633,8 @@ openshell sandbox exec -n policy-lab -- sh -lc 'touch /tmp/policy-lab-ok && echo
 #### Blocked write to `/sandbox`
 
 This fails because `include_workdir: false` and `/sandbox` is only listed as `read_only`.
-OpenClaw would hit this same OpenShell denial if it tried to write outside the allowed
-directories.
+The write is denied with a permission error, not a "file not found" error. OpenClaw would
+hit this same OpenShell denial if it tried to write outside the allowed directories.
 
 ```bash
 openshell sandbox exec -n policy-lab -- sh -lc 'touch /sandbox/policy-lab-blocked'
@@ -733,6 +684,10 @@ command: |
 hint: "Run `whoami` in the lab sandbox with the command above."
 success: "Runtime identity matches the policy."
 ```
+
+> If a proof for one of the static domains (filesystem and process) does not hold, fix the
+> policy file, delete `policy-lab`, and create it again: those domains cannot change on a
+> running sandbox.
 
 ### 5.3 Network
 
@@ -796,14 +751,9 @@ hint: "Apply `httpbin.policy.yaml` with `claw policy-add`, wait a few seconds, a
 success: "Blocked, then allowed: a network rule was hot-reloaded on a running sandbox."
 ```
 
-The full cycle: **blocked → add policy → allowed** — all without restarting the sandbox. You'll use this same pattern in the integration lessons when adding API endpoints for real integrations.
+The full cycle: **blocked → add policy → allowed**. You'll use this same pattern in the last two lessons when adding API endpoints for real integrations.
 
-For narrow changes during a running demo, `openshell policy update` adds or removes a single endpoint or rule. Verify both the allow path and the deny path in the logs afterward:
-
-```text
-openshell policy update agent --add-endpoint api.github.com:443:read-only:rest:enforce
-openshell policy update agent --add-allow 'api.github.com:443:GET:/repos/**'
-```
+For narrow changes during a running demo, use `openshell policy update`, which [What Is OpenShell?](/learn/what-is-openshell) introduced, to add or remove a single endpoint or rule, then verify both the allow path and the deny path in the logs.
 
 ### 5.4 Inference
 
@@ -909,13 +859,6 @@ whether a model answered.
 claw inference-check
 ```
 
-> **`inference.local`.** OpenShell has a second way to reach a model: a shared route at
-> `https://inference.local`, where the gateway picks the model and adds the credential.
-> NemoClaw still uses it for a few setups, such as a local NVIDIA NIM. For NVIDIA's hosted
-> endpoints it used that route in earlier releases and now attaches a provider to each
-> sandbox instead. See
-> [OpenShell inference](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/inference-routing).
-
 ```check
 task: "An unlisted model service is blocked, the listed one is reachable, and the managed sandbox answers through a placeholder, never a real key."
 command: |
@@ -930,18 +873,12 @@ hint: "Run the cells above in order. If `claw inference-check` says busy, anothe
 success: "The network policy decides where a request may go, and the provider supplies the key without the sandbox ever holding it."
 ```
 
-You just saw three things:
-
-1. **The network rule.** The lab sandbox reached `GET /v1/models` on the NVIDIA endpoint,
-   was refused on a path the policy does not list, and was refused on a host the policy
-   does not mention.
-2. **No provider, no credential.** The lab sandbox could reach the endpoint and still held
-   nothing it could use to call a model.
-3. **The placeholder.** The managed sandbox holds a placeholder, and a real model request
-   still succeeded, because OpenShell swapped in the key after the request left.
-
 That is the full inference security model: the agent can only reach endpoints the network
 policy allows, and it never has real credentials.
+
+> **`inference.local`.** OpenShell has a second way to reach a model: a shared route at
+> `https://inference.local`, where the gateway picks the model and adds the credential. The
+> [Architecture](/learn/architecture) lesson says where NemoClaw still uses it.
 
 ### Cleanup
 
@@ -963,29 +900,11 @@ success: "The lab sandbox is cleaned up; the course sandbox is untouched."
 
 ---
 
-## Checkpoint
+## What You Accomplished
 
-The graded checks above verify each domain. Before moving on, all of these should hold:
-
-1. Your independent policy design passed `claw check-fs-policy`.
-2. The root policy was rejected and left no `root-rejected` sandbox.
-3. In the lab sandbox, the `/tmp` write succeeded and the `/sandbox` write was denied with a permission error, not a "file not found" error.
-4. `whoami` in the lab sandbox returned `sandbox`.
-5. `httpbin.org` was blocked, then allowed after `claw policy-add`, with the sandbox staying Ready across the change.
-6. `api.openai.com` was blocked, the NVIDIA model list answered with `HTTP_STATUS=200`, and the managed sandbox answered a model request while holding only a credential placeholder.
-
-If one does not hold, rerun that step and its check. For the static domains (filesystem and process), fix the policy file, delete `policy-lab`, and create it again: those domains cannot change on a running sandbox.
-
----
-
-## ✅ What You Accomplished
-
-- Distinguished a NemoClaw onboarding tier from a lower-level OpenShell policy
 - Built filesystem_policy, landlock, process, and network_policies sections into one policy file
-- Independently designed and validated a least-privilege filesystem policy
 - Saw OpenShell reject a root process identity before any sandbox started
-- Proved an allowed and a blocked filesystem write, and kept the denial instead of widening `/sandbox`
-- Hot-reloaded a network rule on a running sandbox: blocked, updated, allowed
+- Proved an allowed and a blocked action in each domain, and hot-reloaded a network rule on a running sandbox
 - Separated reaching a model endpoint from holding a credential, and confirmed the managed sandbox only ever sees a placeholder
 
 ## Next Steps

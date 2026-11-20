@@ -43,18 +43,19 @@ Step 4: Test it                 → Validate the live response before presenting
 
 **Why NASA APOD?** It's a compact real integration:
 
-- **Low-friction auth** — the checked-in lesson and deployed skill both use the public, rate-limited `DEMO_KEY`
+- **Low-friction auth** — the checked-in lesson and deployed skill both use the public, rate-limited `DEMO_KEY`; a key in the course host's `.env` is deliberately out of scope and is not automatically injected into the sandbox agent
 - **One endpoint** — `api.nasa.gov/planetary/apod`
 - **One HTTP method** — `GET`
 - **Visually impressive** — returns astronomy media with explanations
 
-A key in the course host's `.env` is deliberately out of scope: it is not automatically injected into the sandbox agent. The next lesson applies the same pattern to more APIs and a custom personality.
+The next lesson applies the same pattern to more APIs and a custom personality.
 
 ### Create the NASA Explorer agent
 
 The skill is installed for one exact agent, so that agent comes first. Its persona is a
-checked-in [SOUL.md](https://docs.openclaw.ai/concepts/soul). Read it; nothing in this
-lesson regenerates or rewrites it:
+checked-in [SOUL.md](https://docs.openclaw.ai/concepts/soul). The checked-in SOUL.md and
+SKILL.md are the source of truth; nothing in this lesson regenerates or rewrites them.
+Read the persona:
 
 ```bash
 cat "$CLAW_COURSE_DIR/tracks/04-integrations/souls/nasa-explorer.md"
@@ -96,9 +97,7 @@ success: The exact agent profile is verified.
 
 ## 2. Inspect the Canonical SKILL.md
 
-Every skill lives in its own directory and is defined by [`SKILL.md`](https://docs.openclaw.ai/tools/creating-skills). The checked-in file is the source of truth; running this lesson must not regenerate or silently change it.
-
-OpenClaw requires the YAML frontmatter delimiter on line 1. The SPDX comment therefore follows the closing frontmatter delimiter, before the instructional Markdown body. The frontmatter tells OpenClaw *whether* to load the skill; the body tells the agent *how* to use it.
+Every skill lives in its own directory and is defined by [`SKILL.md`](https://docs.openclaw.ai/tools/creating-skills). OpenClaw requires the YAML frontmatter delimiter on line 1. The SPDX comment therefore follows the closing frontmatter delimiter, before the instructional Markdown body. The frontmatter tells OpenClaw *whether* to load the skill; the body tells the agent *how* to use it.
 
 Look at the first nine lines. **Expected result:** `---` on line 1, the closing `---`, then the `<!--` comment that carries `SPDX-License-Identifier: Apache-2.0`.
 
@@ -106,7 +105,7 @@ Look at the first nine lines. **Expected result:** `---` on line 1, the closing 
 head -n 9 "$CLAW_COURSE_DIR/tracks/04-integrations/skills/nasa-apod/SKILL.md"
 ```
 
-Then read the exact checked-in source without modifying it:
+Then read the whole file:
 
 ```bash
 cat "$CLAW_COURSE_DIR/tracks/04-integrations/skills/nasa-apod/SKILL.md"
@@ -117,7 +116,7 @@ cat "$CLAW_COURSE_DIR/tracks/04-integrations/skills/nasa-apod/SKILL.md"
 - **Frontmatter `description`** — tells the LLM when the skill applies and sets clear exclusions.
 - **`requires.bins: ["curl"]`** — keeps the skill ineligible when its HTTP client is missing.
 - **Body** — bounded API calls, response requirements, presentation rules, and error handling.
-- **Credential boundary** — the deployed skill uses `DEMO_KEY`; it does not claim access to a host `.env` file.
+- **Credential boundary** — `DEMO_KEY` only, as section 1 said.
 
 ### The Full SKILL.md Spec
 
@@ -258,16 +257,8 @@ def validate_apod_payload(payload):
 
 ## 3. Add the Network Policy
 
-OpenShell [sandboxes](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes)
-run in a **zero-trust networking environment**: outbound access requires an explicit
-[network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema). The
-egress proxy evaluates host, port, method, and path before a request leaves the
-sandbox.
-
-The next steps are ownership-safe. They inspect any existing `nasa_apod` entry and
-preserve it unchanged. A blocked-before/allowed-after demonstration runs only when
-that entry is absent; adding the course rule then requires explicit target-scoped
-mutation authorization. Safe mode never removes or overwrites someone else's rule.
+OpenShell [sandboxes](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes) run in a **zero-trust networking environment**: outbound access requires an explicit
+[network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema), which the egress proxy checks before a request leaves the sandbox.
 
 Start with a read-only comparison of the live base policy against the course entry:
 
@@ -276,8 +267,9 @@ claw agent-policy-status "$CLAW_SANDBOX" nasa-apod
 ```
 
 If it reports `nasa_apod: missing`, run a read-only default-deny probe before adding
-anything. If an entry is already present, skip the probe: removing it just to watch a
-block would destroy prior state.
+anything; the blocked-before/allowed-after demonstration runs only when that entry is
+absent. If an entry is already present, skip the probe: these steps are ownership-safe,
+and removing someone else's rule just to watch a block would destroy prior state.
 
 ```bash
 openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 10 -- curl -4 -sS --max-time 10 'https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY'
@@ -352,9 +344,7 @@ success: The policy allows the request and the response is usable.
 
 A validated response means the live API returned usable APOD data through the currently
 provisioned rule. Network-policy updates are hot-reloadable, so an authorized
-course-owned addition did not require sandbox recreation. Only a course-owned addition
-supports a blocked-before/allowed-after claim; a preserved incompatible entry or a
-safe-mode skip produces no live-success claim.
+course-owned addition did not require sandbox recreation.
 
 ---
 
@@ -434,7 +424,7 @@ nemoclaw "$CLAW_SANDBOX" agent --agent nasa-apod \
   -m "What is today's Astronomy Picture of the Day?"
 ```
 
-If this reports an unknown agent id even though the agent check passed, the running gateway has not loaded the new agent yet: run `nemoclaw "$CLAW_SANDBOX" gateway restart` and send the prompt again. If the cell errors because the gateway is down, check it with `openshell sandbox exec -n "$CLAW_SANDBOX" -- openclaw gateway health`. If it reports `pairing required` or `scope upgrade pending approval`, wait a few seconds and run it again.
+If this reports an unknown agent id even though the agent check passed, run `nemoclaw "$CLAW_SANDBOX" gateway restart` and send the prompt again. If the cell errors because the gateway is down, check it with `openshell sandbox exec -n "$CLAW_SANDBOX" -- openclaw gateway health`. If it reports `pairing required` or `scope upgrade pending approval`, wait a few seconds and run it again.
 
 Each run with `--agent nasa-apod` continues the same session; nothing resets it automatically. Resetting a session is a host-side NemoClaw lifecycle operation, not an in-chat `/new` message. If you want a clean transcript, reset the agent's main session:
 
@@ -477,48 +467,11 @@ If any piece is missing, the lesson preserves state and refuses to claim the ful
 
 ---
 
-## Real-World Connection
-
-The NASA APOD demo is useful because it shows several NVIDIA agent-runtime ideas in one small flow:
-
-- **A visible outcome** — astronomy media makes successful response handling easy to inspect.
-- **Explicit credential scope** — the deployed skill uses `DEMO_KEY`; host `.env` state is not implied.
-- **Layered control** — SOUL instructions, exact-agent skill installation, and OpenShell egress policy each have a distinct role.
-- **Fail-closed evidence** — malformed JSON, incompatible policies, and skill conflicts do not become success claims.
-
-The next lesson builds a Daily Financial Briefing agent that composes five public APIs with a canonical financial-analyst persona.
-
----
-
-## Checkpoint
-
-Verify only the outcomes your path through the lesson actually produced.
-
-1. **Check:** the exact agent profile was verified.
-   - **Expected:** `claw agent-create` reports that the identity, workspace, and canonical SOUL already match, or creates and verifies the missing agent after authorization.
-   - **Safe mode/conflict:** `claw agent-verify` keeps failing and the later deployment skips.
-
-2. **Check:** policy ownership remained safe.
-   - **Expected:** an exact existing entry was preserved, or a missing entry was added without replacement after authorization.
-   - **Safe mode/conflict:** no entry was changed and the live probes were skipped.
-
-3. **Check:** skill ownership remained safe.
-   - **Expected:** identical content was preserved or the canonical skill was installed for `nasa-apod` after authorization.
-   - **Conflict:** `claw agent-skill-status` keeps failing; differing workspace content is preserved.
-
-4. **Check:** your independent response validator handled every static fixture.
-   - **Expected:** `NASA_RESPONSE_HARDENING_OK` prints without network access.
-   - **If not working:** inspect non-dictionary, missing-explanation, and unsafe-URL cases.
-
----
-
-## ✅ What You Accomplished
+## What You Accomplished
 
 - Inspected the canonical SOUL.md and SKILL.md without rewriting either file
 - Verified or safely preserved the exact agent profile before deployment
 - Rejected APOD policy supersets instead of treating broader access as equivalent
-- Kept the deployed skill on DEMO_KEY rather than implying access to host secrets
-- Distinguished live proof, preserved state, conflicts, and safe-mode outcomes
 - Hardened live APOD response handling against malformed and unsafe payloads
 
 ## Next Steps

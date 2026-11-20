@@ -26,7 +26,6 @@ ALL_SLUGS = {lesson.slug for course in load_courses(LESSON_DIR.parent) for lesso
 EXPECTED_ORDER = [
     "agent-harness",
     "setup",
-    "concepts",
     "architecture",
     "what-is-openshell",
     "sandbox-policies",

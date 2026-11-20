@@ -28,9 +28,9 @@ OpenShell is the **sandbox runtime** that creates isolated environments for AI a
 enforces security policies on everything they do. Think of it as a container runtime
 built for AI agent safety.
 
-Without a sandbox, an AI agent has the same access as the user who launched it — it can
-read any file, reach any endpoint, and run any program. OpenShell removes that implicit
-trust and replaces it with explicit, auditable policy controls. See the
+In [Why a Sandbox](/learn/why-a-sandbox) you saw that an agent without a sandbox has the
+same access as the user who launched it. OpenShell removes that implicit trust and replaces
+it with explicit, auditable policy controls; see the
 [OpenShell Overview](https://docs.nvidia.com/openshell/v0.0.116/about/overview) for the design rationale.
 
 When you run an AI agent inside an OpenShell sandbox:
@@ -40,28 +40,10 @@ When you run an AI agent inside an OpenShell sandbox:
 - The agent **runs as a non-root user** with restricted system calls
 - Every denied action is **logged** so you can audit what happened
 
-### Where OpenShell Fits in the Stack
-
-```
-┌─────────────────────────────────────────────┐
-│  You (the operator)                         │
-│  Type commands, read output, watch dashboard │
-├─────────────────────────────────────────────┤
-│  NemoClaw CLI                               │  ← Deploys and manages agents
-│  nemoclaw onboard / connect / logs          │
-├─────────────────────────────────────────────┤
-│  OpenShell                                  │  ← THIS LESSON
-│  Creates sandboxes, enforces policies       │  ← Isolation + enforcement
-│  openshell sandbox / policy / logs          │
-├─────────────────────────────────────────────┤
-│  OpenClaw (inside the sandbox)              │  ← The agent harness
-│  Personality, skills, memory, channels      │  ← Talks to models, uses tools
-└─────────────────────────────────────────────┘
-```
-
-OpenShell is the **layer in between**: the boundary the harness runs inside. It doesn't
-know what the agent does, only what the agent is **allowed** to do. The policies you write
-in this course define that boundary.
+The stack map in [the first lesson](/learn/agent-harness) shows where OpenShell fits among
+the three products. OpenShell is the **dashed line** on that map: the boundary the harness
+runs inside. It doesn't know what the agent does, only what the agent is **allowed** to do.
+The policies you write in this course define that boundary.
 For how the layers communicate, see the
 [Architecture documentation](https://docs.nvidia.com/openshell/about/architecture).
 
@@ -95,9 +77,9 @@ The CLI is organized into **sandbox commands** (`sandbox`, `service`, `forward`,
 
 ## 3. Sandbox Lifecycle
 
-A **sandbox** is an isolated environment where an agent runs. Each sandbox has its own
-filesystem, network namespace, and security policy. That isolation is what keeps one
-agent from interfering with another or touching host resources it shouldn't.
+Each sandbox has its own filesystem, network namespace, and security policy, so one agent
+cannot interfere with another. In this section you list sandboxes, run commands in one, and
+create and delete one of your own.
 See [Manage Sandboxes](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes)
 for the full lifecycle documentation.
 
@@ -154,7 +136,6 @@ openshell sandbox exec -n "$CLAW_SANDBOX" -- ls -la /sandbox/
 ```
 
 **Key observations:**
-- The user is `sandbox`, not `root` — privilege is dropped
 - `https_proxy` and `http_proxy` point to `10.200.0.1:3128` — the egress proxy that enforces [network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema)
 - `/sandbox/` is the agent's working directory with `.openclaw` (OpenClaw runtime config) and `.nemoclaw` (NemoClaw state)
 
@@ -197,7 +178,7 @@ openshell sandbox upload --help
 ```
 
 The `upload` command copies files from your host into a sandbox — this is how skills
-(SKILL.md files) and configuration get deployed. You'll use it in the integration lessons when
+(SKILL.md files) and configuration get deployed. You'll use it in the last two lessons when
 building real integrations.
 
 ### Delete a Sandbox
@@ -318,11 +299,11 @@ Every policy in this course has four sections:
 | `process` | User identity (`sandbox` or a numeric non-root ID, never `root`) | **Static** — locked at creation |
 | `network_policies` | Which endpoints the sandbox can reach | **Dynamic** — hot-reloadable |
 
+Check them against your own sandbox: in the `--full` output above, the YAML under the `---`
+line contains `filesystem_policy`, `landlock`, `process`, and `network_policies`.
+
 OpenShell 0.0.116 also accepts an optional `network_middlewares` section, which this
 course does not use.
-
-Static sections can only be changed by recreating the sandbox. [Network policies](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) can be
-updated on a running sandbox with `openshell policy set`.
 
 > 💡 **Next:** the [Sandbox Policies](/learn/sandbox-policies) lesson teaches you how to write each policy
 > section from scratch.
@@ -331,19 +312,22 @@ updated on a running sandbox with `openshell policy set`.
 
 ## 6. Inference Providers
 
-Providers manage how AI model credentials reach the sandbox. A provider keeps the real API key
-on the host. A sandbox with that provider attached gets a placeholder in its place, and
-OpenShell swaps in the real key as an approved request leaves the sandbox, so the agent never sees it.
-If the agent is compromised, the attacker cannot steal your API keys — they never
-existed inside the sandbox. See
-[Manage Providers](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-providers) for
-setup details and
-[Inference Routing](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/inference-routing)
-for `inference.local`, the shared route that the OpenShell **privacy router** serves.
-A shared `inference.local` route belongs to an OpenShell workspace (a grouping of sandboxes
-and providers; this course uses the one named `default`), not to one sandbox. That is
-different from the provider attached to your sandbox, and from an OpenClaw agent workspace,
-which you meet later.
+A [provider](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-providers) keeps the
+real API key for a model on the host. NemoClaw onboarding created the one here,
+`nemoclaw-nvidia-prod-v1`, and attached it to the course sandbox. Inside the sandbox,
+`NVIDIA_INFERENCE_API_KEY` holds a placeholder, not the key. It looks like
+`openshell:resolve:env:v3_NVIDIA_INFERENCE_API_KEY` (`v3_` is a revision number; yours may show
+`s` followed by a long hexadecimal handle instead). The egress proxy swaps in the real key on a
+request to the provider's endpoint, so a compromised agent has no key to steal; you prove this
+in [Sandbox Policies](/learn/sandbox-policies). Sent to a host outside the provider's profile,
+even one the network policy allows, the placeholder is refused with HTTP 403
+(`credential_endpoint_mismatch`).
+
+The shared `inference.local` route that the OpenShell privacy router serves
+([Inference Routing](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/inference-routing)) is
+explained in the [Architecture](/learn/architecture) lesson. It belongs to an OpenShell workspace
+(a grouping of sandboxes and providers; this course uses the one named `default`). That is not
+the same thing as an OpenClaw agent workspace, which you meet later.
 
 ```bash
 openshell provider list
@@ -357,18 +341,6 @@ hint: "Onboarding creates the provider. If the list is empty, run `nemoclaw stat
 success: "A provider is registered with the gateway."
 ```
 
-The provider was created when setup ran NemoClaw onboarding. It is named
-`nemoclaw-nvidia-prod-v1` and is attached to the course sandbox. Inside the sandbox, the agent sees
-a **placeholder token** in `NVIDIA_INFERENCE_API_KEY`, such as
-`openshell:resolve:env:v3_NVIDIA_INFERENCE_API_KEY`, instead of the real key. OpenShell assigns the
-`v3_` piece (a revision number, or `s` followed by a long hexadecimal handle), so yours may
-differ.
-When a request to the provider's endpoint goes through the egress proxy, the proxy swaps the placeholder
-for the real credential — so a compromised agent cannot exfiltrate your keys, because
-the real values never enter the sandbox. The placeholder works only for that endpoint: sent to a
-host outside the provider's profile, even one the network policy allows, it is refused with
-HTTP 403 (`credential_endpoint_mismatch`).
-
 ---
 
 ## 7. Advanced Commands
@@ -376,6 +348,8 @@ HTTP 403 (`credential_endpoint_mismatch`).
 These commands are used less often but matter for debugging and remote access. See
 [Security Best Practices](https://docs.nvidia.com/openshell/v0.0.116/security/best-practices)
 for guidance on hardening remote sandbox access.
+
+Check if the OpenShell gateway is healthy:
 
 ```bash
 openshell status
@@ -387,17 +361,11 @@ This is the shape of the command OpenSSH runs as its `ProxyCommand`; you do not 
 openshell ssh-proxy --gateway <gateway-url> --sandbox-id <sandbox-id> --token <token>
 ```
 
-| Command | When to use it |
-|---------|---------------|
-| `openshell status` | Check if the OpenShell gateway is healthy |
-| `openshell ssh-proxy` | SSH directly into a sandbox (used by `ProxyCommand` in SSH config) |
-| `openshell term` | Open the TUI for real-time network monitoring (interactive) |
-| `openshell doctor` | Diagnose gateway issues |
-| `openshell sandbox connect` | Attach to a sandbox's main process, not a new shell (detach with Ctrl-P, then Ctrl-Q). For a new shell, use `openshell sandbox exec -n NAME --tty -- /bin/bash -l`, or `nemoclaw <name> connect` on a NemoClaw sandbox |
-
 ---
 
 ## 8. CLI Quick Reference
+
+The local training environment uses the same OpenShell binaries, policies, and CLI as production.
 
 | Command | What it does |
 |---------|-------------|
@@ -408,66 +376,29 @@ openshell ssh-proxy --gateway <gateway-url> --sandbox-id <sandbox-id> --token <t
 | `openshell sandbox delete N` | Delete a sandbox |
 | `openshell sandbox upload N SRC DST` | Upload files to sandbox |
 | `openshell sandbox download N SRC DST` | Download files from sandbox |
-| `openshell sandbox connect N` | Attach to the sandbox's main process |
-| `openshell sandbox exec -n N --tty -- /bin/bash -l` | Open a new interactive shell |
+| `openshell sandbox connect N` | Attach to the sandbox's main process, not a new shell (detach with Ctrl-P, then Ctrl-Q) |
+| `openshell sandbox exec -n N --tty -- /bin/bash -l` | Open a new interactive shell (or `nemoclaw <name> connect` on a NemoClaw sandbox) |
 | `openshell logs N --since T` | View sandbox logs |
 | `openshell logs N --tail` | Stream logs in real time |
 | `openshell policy get N` | View sandbox policy |
 | `openshell policy get N --full` | Full policy with YAML header |
-| `openshell policy set N --policy F --wait` | Apply a policy |
+| `openshell policy set N --policy F --wait` | Apply a policy (hot-reloads network policies on a running sandbox) |
 | `openshell provider list` | List inference providers |
 | `openshell provider create` | Create a provider |
 | `openshell status` | Gateway health |
-| `openshell term` | Interactive TUI |
-| `openshell doctor` | Diagnose issues |
+| `openshell ssh-proxy` | SSH directly into a sandbox (used by `ProxyCommand` in SSH config) |
+| `openshell term` | Open the TUI for real-time network monitoring (interactive) |
+| `openshell doctor` | Diagnose gateway issues |
 | `openshell policy update N --add-endpoint ...` | Add a targeted runtime policy rule |
 
 ---
 
-## Real-World Connection
+## What You Accomplished
 
-Every command you ran in this lesson works identically on a production server.
-In a real deployment:
-
-- `openshell sandbox list` shows all agent sandboxes running on a remote GPU machine
-- `openshell logs` streams production deny events to your terminal or monitoring stack
-- `openshell policy set` hot-reloads network policies without restarting agents
-- `openshell provider create` configures inference credentials that never enter the sandbox
-
-The local training environment uses the same OpenShell binaries, policies, and CLI as production.
-
----
-
-## Checkpoint
-
-Verify the OpenShell runtime before moving on.
-
-### Command-Output Verification
-
-1. **Check:** `openshell sandbox list` shows the course sandbox as Ready.
-   - **Expected:** one row with Phase `Ready` for the sandbox that setup created.
-   - **If not working:** go back to [Set Up Your Environment](/learn/setup), change its cell to `claw setup --force`, and run it there.
-
-2. **Check:** `openshell provider list` shows a configured inference provider.
-   - **Expected:** at least one provider row (for example `nemoclaw-nvidia-prod-v1`, which onboarding creates for NVIDIA Endpoints).
-   - **If not working:** reread the providers section of this lesson, then run `openshell provider list` again.
-
-3. **Check:** `openshell policy get "$CLAW_SANDBOX" --full` prints the four policy sections this lesson introduced.
-   - **Expected:** the YAML under the `---` line contains `filesystem_policy`, `landlock`, `process`, and `network_policies`.
-   - **If not working:** rerun the `--full` command from section 5; if it still fails, your sandbox is not Ready; go back to [Set Up Your Environment](/learn/setup), change its cell to `claw setup --force`, and run it there.
-
----
-
-## ✅ What You Accomplished
-
-- Understood what OpenShell is and where it fits in the stack
-- Used every core `openshell` CLI command with real output
 - Created, inspected, and deleted a sandbox
 - Read sandbox logs and understood the log format
 - Viewed sandbox policies and understood the 4-section structure
 - Listed inference providers and understood how placeholders keep real keys out of the sandbox
-
-- Learned when to use incremental `openshell policy update` instead of replacing a full policy file
 
 ## Next Steps
 

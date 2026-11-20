@@ -26,12 +26,12 @@ from web.lessons import parse_lesson
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LESSON_FILES = {
-    "nasa-apod": REPO_ROOT / "web" / "courses" / "02_claw" / "07_nasa_apod.md",
+    "nasa-apod": REPO_ROOT / "web" / "courses" / "02_claw" / "06_nasa_apod.md",
     "daily-financial-briefing": REPO_ROOT
     / "web"
     / "courses"
     / "02_claw"
-    / "08_daily_financial_briefing.md",
+    / "07_daily_financial_briefing.md",
 }
 AGENT_COMMANDS = {
     "agent-create": lab_agents.cmd_agent_create,

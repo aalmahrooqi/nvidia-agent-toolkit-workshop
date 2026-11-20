@@ -44,7 +44,7 @@ claw setup
 ```
 
 Setup takes several minutes, mostly downloading sandbox images. It keeps running if you leave
-this page, so you can start [the next lesson](/learn/concepts) while you wait. Run the cell
+this page, so you can start [the next lesson](/learn/architecture) while you wait. Run the cell
 again at any time to see its progress.
 
 If the course was launched with the key already supplied, setup has run and the cell says so
@@ -111,4 +111,4 @@ success: "The environment is ready. Every lab in the course runs against this sa
 
 ## Next
 
-Continue to [NemoClaw, OpenShell, and Agent Harnesses](/learn/concepts).
+Continue to [Architecture of the Managed Stack](/learn/architecture).
