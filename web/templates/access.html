@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agentic AI 101</title>
+  <script src="{{ static_url('theme.js') }}"></script>
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
+</head>
+<body class="home">
+  <header class="topbar">
+    <span class="brand"><img class="brand-logo" src="{{ static_url('nvidia-logo.png') }}" alt="NVIDIA" width="99" height="34"><span>Agentic AI 101</span></span>
+    <nav class="steps" aria-label="Display">
+      <button type="button" id="theme-toggle" class="btn">🌙 Dark mode</button>
+    </nav>
+  </header>
+
+  <main class="catalog">
+    <div class="hero">
+      <img class="hero-logo" src="{{ static_url('nvidia-logo.png') }}" alt="NVIDIA" width="200" height="69">
+      <h1>Agentic AI 101</h1>
+      <p class="subtitle">Enter the access code to open the workshop</p>
+    </div>
+
+    <form class="key-form access-form" method="post" action="/access"{% if wrong %} data-state="error"{% end %}>
+      <label class="key-label" for="access-code">Access code</label>
+      <div class="key-row">
+        <input class="key-input" id="access-code" name="code" type="password" autocomplete="current-password" required autofocus>
+        <input type="hidden" name="next" value="{{ following }}">
+        <button type="submit" class="btn btn-start">Open the workshop</button>
+      </div>
+      {% if wrong %}<p class="key-status" role="alert">That code is not right. Check it and try again.</p>{% end %}
+      <p class="key-hint">Whoever started this site set the code as <code>CLAW_WEB_TOKEN</code>.</p>
+    </form>
+  </main>
+</body>
+</html>

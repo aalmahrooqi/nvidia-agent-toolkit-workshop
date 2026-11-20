@@ -114,7 +114,8 @@ uv run python -m web.server --dev
 - **The shell** in Course 2 starts in `lab/`, a scratch folder for the files learners write.
   **`claw`** ([`web/lab.py`](web/lab.py)) is a small helper on its PATH.
 - **The server** is one Python process with no build step. It runs code on the host, so it
-  binds to loopback and refuses any other address unless `CLAW_WEB_TOKEN` is set.
+  binds to loopback and refuses any other address unless `CLAW_WEB_TOKEN` is set or the
+  address is a private one behind a login (`--behind-login`, which the Brev Launchable uses).
 
 The notebooks in `tracks/` remain the source the Course 2 lessons were converted from.
 

@@ -16,19 +16,29 @@ Everything is one process on the course host. The page talks to it these ways:
 * ``WS  /ws/term``        a terminal in the page, bridged to a real shell
 
 Cells and the shell run code on the host, so access control is the deployment's
-job: the server binds to loopback by default and refuses any other address
-unless a token is configured. On Brev, put a Secure Link in front of it.
+job. The server binds to loopback by default and refuses any other address
+unless one of these holds:
+
+* ``--behind-login``: the address is on a private network whose only way in
+  already asks for a login. On Brev that is the instance's private mesh
+  address, which Brev's HTTP links arrive on. Listening on every address is
+  still refused, because an instance's port can also answer on its public
+  address, where nothing asks for a login.
+* ``CLAW_WEB_TOKEN``: visitors open a link that carries the token
+  (``/?token=...``) or type it into the access page the site shows instead.
 """
 
 import argparse
 import asyncio
 import codecs
 import hmac
+import ipaddress
 import json
 import os
 import re
 import signal
 import sys
+import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -45,6 +55,12 @@ REPO_ROOT = WEB_ROOT.parent
 TOKEN_COOKIE = "claw_web_token"
 REQUEST_MARKER = "claw-web"
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+WILDCARD_HOSTS = frozenset({"", "0.0.0.0", "::"})
+# A token that guards a shell on a reachable address has to be hard to guess.
+MIN_TOKEN_LENGTH = 12
+# Wrong access codes allowed from one address before it has to wait.
+ACCESS_ATTEMPTS = 10
+ACCESS_WINDOW_SECONDS = 300
 _SECRET_RE = re.compile(r"(nvapi|tvly)-[A-Za-z0-9_-]+")
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 _SESSION_RE = re.compile(r"[A-Za-z0-9_-]{16,64}")
@@ -148,6 +164,43 @@ class _AccessMixin:
         token = self.settings["config"].token
         return hmac.compare_digest((supplied or "").encode(), token.encode())
 
+    def _failures(self) -> list[float]:
+        """Times of this address's recent wrong codes, oldest first."""
+        attempts: dict[str, list[float]] = self.settings["access_failures"]
+        cutoff = time.monotonic() - ACCESS_WINDOW_SECONDS
+        recent = [moment for moment in attempts.get(self.request.remote_ip, []) if moment > cutoff]
+        if recent:
+            attempts[self.request.remote_ip] = recent
+        else:
+            attempts.pop(self.request.remote_ip, None)
+        return recent
+
+    def try_code(self, supplied: str | None) -> bool:
+        """Check an access code a visitor typed or followed a link with.
+
+        After too many wrong codes an address is turned away for a while, right
+        code or not, so the code cannot be found by trying them all.
+        """
+        if len(self._failures()) >= ACCESS_ATTEMPTS:
+            raise tornado.web.HTTPError(429, "Too many wrong access codes. Try again later.")
+        if self._token_ok(supplied):
+            return True
+        attempts: dict[str, list[float]] = self.settings["access_failures"]
+        if len(attempts) > 4096:  # a flood of addresses must not grow this without bound
+            attempts.clear()
+        attempts.setdefault(self.request.remote_ip, []).append(time.monotonic())
+        return False
+
+    def grant_access(self) -> None:
+        self.set_cookie(
+            TOKEN_COOKIE,
+            self.settings["config"].token,
+            httponly=True,
+            samesite="Strict",
+            # Behind an HTTPS proxy, never send the cookie over plain HTTP.
+            secure=self.request.headers.get("X-Forwarded-Proto") == "https",
+        )
+
     def require_access(self) -> bool:
         """Return True when the request may proceed; otherwise finish it."""
         if not self.settings["config"].token:
@@ -155,15 +208,15 @@ class _AccessMixin:
         if self._token_ok(self.get_cookie(TOKEN_COOKIE)):
             return True
         # First visit with ?token=...: trade it for a cookie and drop it from the URL.
-        if self.request.method == "GET" and self._token_ok(self.get_query_argument("token", None)):
-            self.set_cookie(
-                TOKEN_COOKIE,
-                self.settings["config"].token,
-                httponly=True,
-                samesite="Strict",
-            )
+        supplied = self.get_query_argument("token", None)
+        if self.request.method == "GET" and supplied is not None and self.try_code(supplied):
+            self.grant_access()
             self.redirect(self.request.path)
             return False
+        self.deny_access()
+        return False
+
+    def deny_access(self) -> None:
         raise tornado.web.HTTPError(403, "A valid access token is required.")
 
 
@@ -202,6 +255,49 @@ class _PageHandler(_AccessMixin, tornado.web.RequestHandler):
         if self.settings.get("dev"):
             reload_lessons(self.application)
 
+    def deny_access(self) -> None:
+        # Someone opening a page gets a place to type the code, not a bare error.
+        if self.request.method == "GET":
+            self.show_access_page(wrong="token" in self.request.query_arguments)
+        else:
+            super().deny_access()
+
+    def show_access_page(self, *, wrong: bool, following: str | None = None) -> None:
+        self.set_status(403)
+        # A form post from a page with "no-referrer" carries "Origin: null", which
+        # AccessHandler could not tell from another site's. Let this page name itself.
+        self.set_header("Referrer-Policy", "same-origin")
+        self.render("access.html", wrong=wrong, following=following or self.request.path)
+
+
+def _local_path(value: str) -> str:
+    """A path on this site to send a visitor to, never another site."""
+    return value if value.startswith("/") and not value.startswith(("//", "/\\")) else "/"
+
+
+class AccessHandler(_PageHandler):
+    """The access page's form: trade the code for the cookie."""
+
+    def prepare(self) -> None:  # reachable without access, by design
+        pass
+
+    def get(self) -> None:
+        self.redirect("/")
+
+    def post(self) -> None:
+        if not self.settings["config"].token:
+            self.redirect("/")
+            return
+        origin = self.request.headers.get("Origin")
+        if origin and urlsplit(origin).netloc != self.request.host:
+            raise tornado.web.HTTPError(403)
+        following = _local_path(self.get_body_argument("next", "/"))
+        if self.try_code(self.get_body_argument("code", "").strip()):
+            self.grant_access()
+            self.redirect(following)
+        else:
+            self.show_access_page(wrong=True, following=following)
+
 
 class IndexHandler(_PageHandler):
     def get(self) -> None:
@@ -235,6 +331,9 @@ class LessonHandler(_PageHandler):
 
 class _ApiHandler(_PageHandler):
     """Base for endpoints that run something on the host or hold a secret."""
+
+    def deny_access(self) -> None:
+        raise tornado.web.HTTPError(403, "A valid access token is required.")
 
     def _same_origin(self) -> bool:
         # A cross-site page cannot set this header without a CORS preflight,
@@ -514,6 +613,7 @@ def make_app(
     app = tornado.web.Application(
         [
             (r"/", IndexHandler),
+            (r"/access", AccessHandler),
             (r"/learn/([a-z0-9-]+)", LessonHandler),
             (r"/api/check", CheckHandler),
             (r"/api/run", RunHandler),
@@ -532,6 +632,7 @@ def make_app(
         static_hash_cache=not dev,
         active_runs=set(),
         session_keys={},
+        access_failures={},
         kernels=KernelPool(
             cwd=config.lab_cwd, base_env=config.process_env(), max_kernels=config.max_kernels
         ),
@@ -597,10 +698,43 @@ def build_config(token: str) -> Config:
     )
 
 
-async def serve(config: Config, host: str, port: int, *, dev: bool = False) -> None:
+def check_exposure(hosts: list[str], token: str, behind_login: bool) -> None:
+    """Refuse to serve a shell where someone could reach it without proving who they are."""
+    exposed = [host for host in hosts if host not in LOOPBACK_HOSTS]
+    if not exposed:
+        return
+    where = ", ".join(host or "every address" for host in exposed)
+    if token:
+        if len(token) < MIN_TOKEN_LENGTH:
+            raise SystemExit(
+                f"CLAW_WEB_TOKEN must be at least {MIN_TOKEN_LENGTH} characters to serve a "
+                f"shell on {where}."
+            )
+        return
+    if not behind_login:
+        raise SystemExit(
+            f"Refusing to serve a shell on {where} without access control. Set "
+            "CLAW_WEB_TOKEN, or pass --behind-login with a private address that can only "
+            "be reached through a login."
+        )
+    for host in exposed:
+        try:
+            private = host not in WILDCARD_HOSTS and not ipaddress.ip_address(host).is_global
+        except ValueError:
+            private = False
+        if not private:
+            raise SystemExit(
+                f"Refusing to serve a shell on {host or 'every address'} without a token. "
+                "--behind-login needs one specific private address, such as the "
+                "instance's Brev mesh address."
+            )
+
+
+async def serve(config: Config, hosts: list[str], port: int, *, dev: bool = False) -> None:
     app, term_manager = make_app(config, dev=dev)
-    server = app.listen(port, address=host)
-    print(f"Agentic AI 101: http://{host}:{port}/", flush=True)
+    servers = [app.listen(port, address=host) for host in hosts]
+    for host in hosts:
+        print(f"Agentic AI 101: http://{host}:{port}/", flush=True)
     if dev:
         print("Dev mode: edited lessons show up when you refresh the page.", flush=True)
 
@@ -611,13 +745,24 @@ async def serve(config: Config, host: str, port: int, *, dev: bool = False) -> N
     try:
         await stop.wait()
     finally:
-        server.stop()
+        for server in servers:
+            server.stop()
         await shutdown_app(app, term_manager)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--host", default=os.environ.get("CLAW_WEB_HOST", "127.0.0.1"))
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("CLAW_WEB_HOST", "127.0.0.1"),
+        help="address to listen on; give several separated by commas",
+    )
+    parser.add_argument(
+        "--behind-login",
+        action="store_true",
+        default=os.environ.get("CLAW_WEB_BEHIND_LOGIN") == "1",
+        help="serve without a token on a private address that is only reachable through a login",
+    )
     parser.add_argument("--port", type=int, default=int(os.environ.get("CLAW_WEB_PORT", "3000")))
     parser.add_argument(
         "--dev",
@@ -629,13 +774,10 @@ def main() -> None:
 
     # The token comes from the environment only, so it never shows up in `ps`.
     token = os.environ.get("CLAW_WEB_TOKEN", "")
-    if args.host not in LOOPBACK_HOSTS and not token:
-        raise SystemExit(
-            f"Refusing to serve a shell on {args.host} without access control. "
-            "Set CLAW_WEB_TOKEN, or bind to 127.0.0.1 behind a Brev Secure Link."
-        )
+    hosts = [host.strip() for host in args.host.split(",")]
+    check_exposure(hosts, token, args.behind_login)
 
-    asyncio.run(serve(build_config(token), args.host, args.port, dev=args.dev))
+    asyncio.run(serve(build_config(token), hosts, args.port, dev=args.dev))
 
 
 if __name__ == "__main__":

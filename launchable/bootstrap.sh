@@ -13,6 +13,7 @@
 #      key in the workshop site's Setup lesson
 #   4. registers the course's Python environment as the Jupyter `python3` kernel
 #   5. starts JupyterLab on the course directory
+#   6. starts the workshop site (web/) where the instance's Brev link can reach it
 #
 # It makes no assumption about which user Brev runs it as or from which
 # directory: started as root, it re-runs itself as the login user.
@@ -23,11 +24,13 @@
 # Usage:
 #   launchable/bootstrap.sh                 # full bootstrap
 #   launchable/bootstrap.sh --jupyter-only  # only (re)start JupyterLab, e.g. after a restart
+#   launchable/bootstrap.sh --web-only      # only (re)start the workshop site
 #
 # Environment:
 #   NVIDIA_API_KEY      Optional. Supply it as a launch parameter to install at
 #                       launch; leave it out and learners run `claw setup`.
-#   CLAW_REPO_URL       Git URL to clone when this script is not run from a checkout.
+#   CLAW_REPO_URL       Git URL of the course. When set, the course is installed from it
+#                       into CLAW_COURSE_DIR, even if this script runs from another copy.
 #   CLAW_USER           Login user to install for when started as root (default: ubuntu).
 #   CLAW_COURSE_DIR     Checkout location (default: ~/claw-training-distilled).
 #   CLAW_START_JUPYTER  Set to 0 to skip starting JupyterLab.
@@ -36,13 +39,17 @@
 #   CLAW_JUPYTER_TOKEN  JupyterLab token. Required when CLAW_JUPYTER_IP is not loopback.
 #   CLAW_START_WEB      Set to 0 to skip starting the workshop site (web/).
 #   CLAW_WEB_PORT       Workshop site port (default: 3000).
-#   CLAW_WEB_HOST       Address the workshop site binds to (default: 127.0.0.1).
-#   CLAW_WEB_TOKEN      Workshop site token. Required when CLAW_WEB_HOST is not loopback.
+#   CLAW_WEB_HOST       Addresses the workshop site binds to, separated by commas.
+#                       Default: loopback plus the instance's Brev private-network
+#                       address, which is where Brev's HTTP links arrive.
+#   CLAW_WEB_INTERFACE  Network interface that carries Brev's private network (default: wt0).
+#   CLAW_WEB_TOKEN      Optional access code for the workshop site. Needed only if you
+#                       set CLAW_WEB_HOST to an address that is reachable without a login.
 #   CLAW_MODEL, CLAW_FORCE_INSTALL, CLAW_SKIP_INFERENCE  Passed through to setup.sh.
 
 set -euo pipefail
 
-passthrough_env="CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_TOKEN,CLAW_MODEL,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE"
+passthrough_env="CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_INTERFACE,CLAW_WEB_TOKEN,CLAW_MODEL,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE"
 
 step() { printf '\n==> %s\n' "$1"; }
 ok() { printf '    OK: %s\n' "$1"; }
@@ -127,16 +134,27 @@ fi
 # --------------------------------------------------------------------------
 export PATH="${HOME}/.local/bin:${PATH}"
 
-if [[ -n "${own_root}" ]]; then
+course_dir="${CLAW_COURSE_DIR:-${HOME}/claw-training-distilled}"
+if [[ -n "${own_root}" && -z "${CLAW_REPO_URL:-}" && -z "${CLAW_COURSE_DIR:-}" ]]; then
+  # Run by hand from a checkout, with nothing saying to install elsewhere: use it in place.
   course_dir="${own_root}"
-else
-  course_dir="${CLAW_COURSE_DIR:-${HOME}/claw-training-distilled}"
+fi
+
+# The Launchable snippet runs this script from a temporary clone. The course
+# must not stay there: install it at its real location and continue from that copy.
+if [[ -z "${own_root}" || ! "${own_root}" -ef "${course_dir}" ]]; then
   if ! is_checkout "${course_dir}"; then
-    [[ -n "${CLAW_REPO_URL:-}" ]] ||
-      fail "Not started from a checkout. Set CLAW_REPO_URL to the course's Git URL."
     [[ ! -e "${course_dir}" ]] || fail "${course_dir} exists but is not a course checkout."
-    step "Cloning the course into ${course_dir}"
-    git clone "${CLAW_REPO_URL}" "${course_dir}"
+    if [[ -n "${CLAW_REPO_URL:-}" ]]; then
+      step "Cloning the course into ${course_dir}"
+      git clone "${CLAW_REPO_URL}" "${course_dir}"
+    elif [[ -n "${own_root}" ]]; then
+      step "Copying the course into ${course_dir}"
+      cp -R "${own_root}" "${course_dir}"
+      rm -rf "${course_dir}/.venv"
+    else
+      fail "Not started from a checkout. Set CLAW_REPO_URL to the course's Git URL."
+    fi
   fi
   exec bash "${course_dir}/launchable/bootstrap.sh" "$@"
 fi
@@ -184,21 +202,50 @@ start_jupyter() {
 }
 
 web_port="${CLAW_WEB_PORT:-3000}"
-web_host="${CLAW_WEB_HOST:-127.0.0.1}"
 web_log="${HOME}/claw-workshop.log"
+web_behind_login=0
+
+# The site serves a shell, so where it listens is its access control.
+#
+# Brev's HTTP links reach the VM over Brev's private network (the NetBird
+# interface, wt0), and they ask for a Brev login first. The VM's port can also
+# answer on its public address, where nothing asks for a login. So the site
+# listens on loopback and the private-network address only, never on every
+# address, and then needs no access code of its own.
+choose_web_host() {
+  if [[ -n "${CLAW_WEB_HOST:-}" ]]; then
+    web_host="${CLAW_WEB_HOST}"
+    return
+  fi
+  local interface="${CLAW_WEB_INTERFACE:-wt0}" private_address=""
+  if command -v ip >/dev/null 2>&1; then
+    private_address="$(ip -4 -o addr show dev "${interface}" 2>/dev/null |
+      awk '{ print $4 }' | cut -d/ -f1 | head -n 1)"
+  fi
+  if [[ -n "${private_address}" ]]; then
+    web_host="127.0.0.1,${private_address}"
+    web_behind_login=1
+  else
+    web_host="127.0.0.1"
+    printf '    NOTE: no %s interface found, so the site listens on loopback only and a\n' "${interface}"
+    printf '          Brev link cannot reach it. Re-run with --web-only once it is up.\n'
+  fi
+}
 
 start_web() {
-  step "Starting the workshop site on ${web_host}:${web_port}"
+  choose_web_host
+  step "Starting the workshop site on ${web_host}, port ${web_port}"
 
-  # Any HTTP answer counts, including a 403 from the token gate.
+  # Any HTTP answer counts, including a 403 from a token gate.
   if curl -sS -o /dev/null "http://127.0.0.1:${web_port}/" 2>/dev/null; then
     ok "something already answers on port ${web_port}; leaving it running"
     return
   fi
 
-  # The site serves a shell. It refuses a non-loopback address without
-  # CLAW_WEB_TOKEN, and it runs without the API key like JupyterLab does.
+  # The site refuses to serve off loopback unless it is told a login is in
+  # front, or given CLAW_WEB_TOKEN. It runs without the API key like JupyterLab.
   CLAW_WEB_HOST="${web_host}" CLAW_WEB_PORT="${web_port}" \
+    CLAW_WEB_BEHIND_LOGIN="${web_behind_login}" \
     env -u NVIDIA_API_KEY setsid nohup uv run python -m web.server \
     >"${web_log}" 2>&1 </dev/null &
 
@@ -318,8 +365,10 @@ Launchable bootstrap complete.
   Course directory: ${course_dir}
   First notebook:   tracks/01-concepts-architecture/01_concepts.ipynb
 
-If no API key was supplied at launch, open the workshop site (port ${web_port}) and
-follow its first lesson, "Set Up Your Environment".
+Open the workshop site through the instance's HTTP port ${web_port} link. Brev asks you to
+sign in; the site itself asks for nothing.
+
+If no API key was supplied at launch, the site's lessons ask for one.
 
 After an instance restart, bring the services back with:
 

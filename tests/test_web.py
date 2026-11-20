@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlencode
 
 import pytest
 import tornado.httpclient
@@ -13,7 +14,15 @@ import tornado.testing
 import tornado.websocket
 
 from web.lessons import LessonError, load_lessons, parse_lesson, slug_for
-from web.server import TOKEN_COOKIE, Config, make_app, redact, shutdown_app
+from web.server import (
+    ACCESS_ATTEMPTS,
+    TOKEN_COOKIE,
+    Config,
+    check_exposure,
+    make_app,
+    redact,
+    shutdown_app,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FAKE_KEY = "nvapi-" + "a1B2c3D4e5F6g7H8"
@@ -254,6 +263,65 @@ class TestSiteWithToken(_SiteCase):
         headers = {**authed, "Content-Type": "application/json", "X-Requested-With": "claw-web"}
         assert json.loads(self.post_check("check-1", headers=headers).body)["passed"] is True
 
+    def test_a_page_without_the_token_shows_the_access_form(self):
+        response = self.fetch("/learn/sample")
+        assert response.code == 403
+        body = response.body.decode()
+        assert 'action="/access"' in body and 'name="code"' in body
+        assert 'name="next" value="/learn/sample"' in body
+        assert "Intro with" not in body and "s3cret-token" not in body
+        # Endpoints the page's scripts call still answer with a bare error.
+        assert b"<form" not in self.fetch("/api/keys?session=" + "a" * 16).body
+
+    def post_code(self, code, following="/learn/sample", **headers):
+        return self.fetch(
+            "/access",
+            method="POST",
+            body=urlencode({"code": code, "next": following}),
+            headers=headers,
+            follow_redirects=False,
+        )
+
+    def test_access_form_trades_the_code_for_a_cookie(self):
+        response = self.post_code(" s3cret-token ")
+        assert response.code == 302
+        assert response.headers["Location"] == "/learn/sample"
+        cookie = response.headers["Set-Cookie"]
+        assert cookie.startswith(f"{TOKEN_COOKIE}=") and "HttpOnly" in cookie
+        assert "Secure" not in cookie
+        # Behind an HTTPS proxy the cookie is never sent over plain HTTP.
+        proxied = self.post_code("s3cret-token", **{"X-Forwarded-Proto": "https"})
+        assert "Secure" in proxied.headers["Set-Cookie"]
+
+    def test_access_form_rejects_a_wrong_code_and_other_sites(self):
+        wrong = self.post_code("nope")
+        assert wrong.code == 403 and "Set-Cookie" not in wrong.headers
+        assert "That code is not right" in wrong.body.decode()
+        assert self.post_code("s3cret-token", Origin="https://evil.example").code == 403
+        assert self.post_code("s3cret-token", Origin="null").code == 403
+
+    def test_access_form_works_the_way_a_browser_posts_it(self):
+        # The page must let the browser send its real origin with the form.
+        page = self.fetch("/learn/sample")
+        assert page.headers["Referrer-Policy"] == "same-origin"
+        origin = f"http://127.0.0.1:{self.get_http_port()}"
+        assert self.post_code("s3cret-token", Origin=origin).code == 302
+
+    def test_access_form_only_sends_visitors_to_this_site(self):
+        for following in ["//evil.example", "https://evil.example", "/\\evil", "learn/sample"]:
+            assert self.post_code("s3cret-token", following).headers["Location"] == "/"
+
+    def test_too_many_wrong_codes_lock_the_address_out(self):
+        for _ in range(ACCESS_ATTEMPTS):
+            assert self.post_code("nope").code == 403
+        assert self.post_code("nope").code == 429
+        # The right code is refused too, or guessing could simply carry on.
+        assert self.post_code("s3cret-token").code == 429
+        assert self.fetch("/learn/sample?token=s3cret-token", follow_redirects=False).code == 429
+        # Someone already inside is not affected.
+        authed = {"Cookie": f"{TOKEN_COOKIE}=s3cret-token"}
+        assert self.fetch("/learn/sample", headers=authed).code == 200
+
     @tornado.testing.gen_test(timeout=20)
     async def test_terminal_needs_the_token(self):
         url = f"ws://127.0.0.1:{self.get_http_port()}/ws/term"
@@ -280,3 +348,39 @@ def test_server_refuses_a_public_address_without_a_token():
     )
     assert result.returncode != 0
     assert "Refusing to serve a shell" in result.stderr
+
+
+def test_server_refuses_a_public_address_with_a_short_token():
+    result = subprocess.run(
+        [sys.executable, "-m", "web.server", "--host", "0.0.0.0", "--port", "0"],
+        cwd=REPO_ROOT,
+        env={**os.environ, "CLAW_WEB_TOKEN": "short"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode != 0
+    assert "at least 12 characters" in result.stderr
+
+
+def test_loopback_and_token_and_login_fronted_addresses_may_serve():
+    check_exposure(["127.0.0.1"], "", False)
+    check_exposure(["0.0.0.0"], "a-long-enough-token", False)
+    # Brev's private mesh address, which only Brev's login-protected links arrive on.
+    check_exposure(["127.0.0.1", "100.98.192.174"], "", True)
+
+
+@pytest.mark.parametrize(
+    ("hosts", "behind_login"),
+    [
+        (["100.98.192.174"], False),  # private, but nobody said a login is in front
+        (["0.0.0.0"], True),  # every address includes the public one
+        (["127.0.0.1", "::"], True),
+        (["127.0.0.1", ""], True),
+        (["54.166.149.44"], True),  # a public address
+        (["example.com"], True),  # not an address this server can vouch for
+    ],
+)
+def test_no_shell_is_served_without_a_token_where_anyone_could_reach_it(hosts, behind_login):
+    with pytest.raises(SystemExit, match="Refusing to serve a shell"):
+        check_exposure(hosts, "", behind_login)

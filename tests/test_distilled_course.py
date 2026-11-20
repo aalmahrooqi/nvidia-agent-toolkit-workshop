@@ -135,3 +135,27 @@ def test_setup_script_reads_pins_that_exist():
             assert isinstance(value, dict) and key in value, dotted
             value = value[key]
         assert value, dotted
+
+
+def test_bootstrap_serves_the_site_on_the_private_network_only():
+    script = (REPO_ROOT / "launchable" / "bootstrap.sh").read_text(encoding="utf-8")
+    choose = script[script.index("choose_web_host() {") : script.index("start_web() {")]
+    # Loopback plus Brev's private-network address, where a Brev login is in front.
+    assert 'web_host="127.0.0.1,${private_address}"' in choose
+    assert "web_behind_login=1" in choose
+    # Never every address: the port can answer on the public one without a login.
+    assert "0.0.0.0" not in script.split("start_web() {")[1]
+    assert not re.search(r"web_host=\S*0\.0\.0\.0", script)
+    start_web = script[script.index("start_web() {") : script.index('case "${1:-}" in')]
+    assert 'CLAW_WEB_BEHIND_LOGIN="${web_behind_login}"' in start_web
+    # No access code is generated, stored, or printed.
+    assert "claw-web-token" not in script
+    assert not re.search(r"(echo|ok|step|printf)[^\n]*\$\{?CLAW_WEB_TOKEN", script)
+
+
+def test_bootstrap_installs_the_course_outside_a_temporary_clone():
+    script = (REPO_ROOT / "launchable" / "bootstrap.sh").read_text(encoding="utf-8")
+    # Run from any copy other than the install location, it installs there and
+    # continues from that copy instead of serving from where it was started.
+    assert '! "${own_root}" -ef "${course_dir}"' in script
+    assert script.count('exec bash "${course_dir}/launchable/bootstrap.sh" "$@"') == 1

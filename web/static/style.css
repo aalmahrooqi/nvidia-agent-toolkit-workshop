@@ -422,6 +422,11 @@ a.brand { color: var(--fg); text-decoration: none; }
 .key-form[data-state="error"] .key-status { color: var(--fail); }
 .key-hint { margin: 8px 0 0; color: var(--fg-dim); font-size: 14px; }
 
+/* ---- access page ---- */
+.access-form { margin-top: 24px; }
+.access-form .key-status { margin: 10px 0 0; }
+.access-form .btn-start { cursor: pointer; }
+
 /* ---- course list ---- */
 body.home { height: auto; }
 .catalog { max-width: 54rem; margin: 0 auto; padding: 32px 24px 64px; }
