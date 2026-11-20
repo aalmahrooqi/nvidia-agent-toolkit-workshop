@@ -9,6 +9,10 @@ A chatbot that makes a mistake gives you a wrong sentence. An agent that makes a
 keeps going. In this lesson you break your agent on purpose, in the three ways agents usually
 break, and make it survive each one.
 
+```agent-map
+step: guardrails
+```
+
 ## What you will do
 
 - Crash the agent with a request for a tool that does not exist

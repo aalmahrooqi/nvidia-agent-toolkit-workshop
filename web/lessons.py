@@ -21,6 +21,12 @@ treatment:
 * ``key`` fences render a field for one API key: YAML with ``name``, ``label``,
   and optionally ``placeholder``, ``hint``, ``optional``.
 * ``solution`` fences render collapsed, behind a "Show solution" toggle.
+* ``agent-map`` fences draw the agent diagram filled in up to ``step``: YAML with
+  ``step`` (``none``, ``llm``, ``memory``, ``tools``, ``search``, ``loop``,
+  ``guardrails``, or ``sandbox``) and optionally ``caption``.
+
+Links to other sites (``https://...``) open in a new tab; links to lessons and
+assets open in place.
 
 Any other fence (``yaml``, ``text``, ...) is shown as plain code. Raw HTML in a
 lesson is escaped, so use Markdown: ``![alt](/assets/...)`` for images served
@@ -29,6 +35,7 @@ callouts.
 """
 
 import html
+import math
 import re
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -41,6 +48,7 @@ TERMINAL_LANGUAGES = frozenset({"terminal"})
 KEY_NAMES = frozenset({"NVIDIA_API_KEY", "TAVILY_API_KEY"})
 _FRONT_MATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+_INLINE_LINK_RE = re.compile(r"\[([^\]]+)\]\(((?:https?://|/)[^)\s]+)\)")
 _ORDER_PREFIX_RE = re.compile(r"^\d+[_-]")
 
 
@@ -88,9 +96,20 @@ class Course:
         return sum(lesson.minutes for lesson in self.lessons)
 
 
+def _anchor(match: re.Match) -> str:
+    text, url = match.group(1), match.group(2)
+    new_tab = 'target="_blank" rel="noopener noreferrer" ' if url.startswith("http") else ""
+    return f'<a {new_tab}href="{url}">{text}</a>'
+
+
 def _inline(text: str) -> str:
-    """Escape text for HTML, keeping `backtick` spans as inline code."""
-    return _INLINE_CODE_RE.sub(r"<code>\1</code>", html.escape(text.strip()))
+    """Escape text for HTML, keeping `backtick` spans and [text](url) links.
+
+    Used for the short fields of check and key blocks (task, hint, label), which
+    are YAML strings and so do not pass through the Markdown renderer.
+    """
+    escaped = _INLINE_LINK_RE.sub(_anchor, html.escape(text.strip()))
+    return _INLINE_CODE_RE.sub(r"<code>\1</code>", escaped)
 
 
 def _yaml_mapping(code: str, block: str, allowed: set[str]) -> dict:
@@ -106,21 +125,133 @@ def _yaml_mapping(code: str, block: str, allowed: set[str]) -> dict:
     return fields
 
 
+_COPY_BUTTON = '<button type="button" class="btn btn-copy">Copy</button>'
+
+
+def _code_head(label: str, buttons: str) -> str:
+    """The header strip of a code block: its language on the left, actions on the right."""
+    return (
+        '<div class="code-head">'
+        f'<span class="code-lang">{html.escape(label)}</span>'
+        f'<span class="code-actions">{buttons}</span>'
+        "</div>"
+    )
+
+
+def _plain_block(body: str, label: str) -> str:
+    return (
+        '<div class="codeblock">'
+        f"{_code_head(label, _COPY_BUTTON)}"
+        f'<pre class="code"><code>{body}</code></pre>'
+        "</div>\n"
+    )
+
+
 def _cell(body: str, kind: str) -> str:
     rows = body.count("\n") + 1
+    buttons = (
+        '<button type="button" class="btn btn-cell-reset" hidden>Reset</button>'
+        f"{_COPY_BUTTON}"
+        '<button type="button" class="btn btn-cell-stop" hidden>Stop</button>'
+        '<button type="button" class="btn btn-cell-run">Run</button>'
+    )
     return (
-        f'<div class="cell" data-kind="{kind}">'
+        f'<div class="cell codeblock" data-kind="{kind}">'
+        f"{_code_head(kind, buttons)}"
         f'<textarea class="cell-code" rows="{rows}" spellcheck="false" '
         f'autocapitalize="off" autocomplete="off" aria-label="Code cell">{body}</textarea>'
-        '<div class="cell-bar">'
-        '<button type="button" class="btn btn-cell-run">Run</button>'
-        '<button type="button" class="btn btn-cell-stop" hidden>Stop</button>'
-        '<button type="button" class="btn btn-cell-reset" hidden>Reset</button>'
-        '<button type="button" class="btn btn-copy">Copy</button>'
-        '<span class="cell-status" role="status"></span>'
-        "</div>"
         '<pre class="cell-output" hidden></pre>'
+        # Shown after every run, so a cell that prints nothing still visibly ran.
+        '<div class="cell-foot" hidden><span class="cell-status" role="status"></span></div>'
         "</div>\n"
+    )
+
+
+# The pieces of the agent, in the order the course builds them: (key, label, icon).
+AGENT_PARTS = (
+    ("llm", "LLM", "🧠"),
+    ("memory", "Memory", "💾"),
+    ("tools", "Tools", "🔧"),
+    ("search", "Web search", "🔎"),
+    ("loop", "Agent loop", "🔁"),
+    ("guardrails", "Guardrails", "🛡️"),
+    ("sandbox", "Sandbox", "📦"),
+)
+
+
+def _agent_map(code: str) -> str:
+    """Draw the agent as a hub with six slots, filled in up to the lesson's step.
+
+    ``step`` names the piece this lesson adds (or ``none`` before anything is
+    built). Earlier pieces are drawn as built, this one is highlighted, and
+    later ones are question marks.
+    """
+    fields = _yaml_mapping(code, "agent-map", {"step", "caption"})
+    keys = [key for key, _, _ in AGENT_PARTS]
+    step = str(fields.get("step") or "none")
+    if step != "none" and step not in keys:
+        raise LessonError(f"agent-map 'step' must be 'none' or one of: {', '.join(keys)}")
+    reached = keys.index(step) if step != "none" else -1
+
+    def state(index: int) -> str:
+        return "built" if index < reached else "now" if index == reached else "unknown"
+
+    built = [label for index, (_, label, _) in enumerate(AGENT_PARTS) if index < reached]
+    if fields.get("caption"):
+        caption = str(fields["caption"])
+    elif reached < 0:
+        caption = "Nothing is built yet. Each lesson fills in one piece."
+    else:
+        adding = f"This lesson adds: {AGENT_PARTS[reached][1]}."
+        caption = f"Built so far: {', '.join(built)}. {adding}" if built else adding
+
+    center_x, center_y, hub_radius, slot_radius = 320, 190, 48, 36
+    spokes, nodes = [], []
+
+    def node(x: float, y: float, radius: int, index: int, label_at: str = "below") -> str:
+        _, label, icon = AGENT_PARTS[index]
+        kind = state(index)
+        # "inside" keeps the hub's label within its circle, clear of the spoke below it.
+        icon_y = y - 9 if label_at == "inside" else y
+        label_y = {"above": y - radius - 9, "below": y + radius + 17, "inside": y + 25}[label_at]
+        inner = (
+            f'<text class="am-q" x="{x:.0f}" y="{y:.0f}">?</text>'
+            if kind == "unknown"
+            else f'<text class="am-icon" x="{x:.0f}" y="{icon_y:.0f}">{icon}</text>'
+            f'<text class="am-label" x="{x:.0f}" y="{label_y:.0f}">{html.escape(label)}</text>'
+        )
+        return (
+            f'<g class="am-node am-{kind}">'
+            f'<circle cx="{x:.0f}" cy="{y:.0f}" r="{radius}"/>{inner}</g>'
+        )
+
+    # Six slots around the hub, clockwise from the upper left.
+    for offset, index in enumerate(range(1, len(AGENT_PARTS))):
+        angle = math.radians(210 + 60 * offset)
+        x = center_x + 222 * math.cos(angle)
+        y = center_y + 116 * math.sin(angle)
+        # Each spoke runs from the edge of the hub to the edge of its slot, not through them.
+        length = math.hypot(x - center_x, y - center_y)
+        unit_x, unit_y = (x - center_x) / length, (y - center_y) / length
+        gap = 6
+        spokes.append(
+            f'<line class="am-spoke am-{state(index)}" '
+            f'x1="{center_x + unit_x * (hub_radius + gap):.0f}" '
+            f'y1="{center_y + unit_y * (hub_radius + gap):.0f}" '
+            f'x2="{x - unit_x * (slot_radius + gap):.0f}" '
+            f'y2="{y - unit_y * (slot_radius + gap):.0f}"/>'
+        )
+        # The top slot's label goes above it, clear of its spoke.
+        nodes.append(node(x, y, slot_radius, index, "above" if unit_y < -0.9 else "below"))
+    nodes.append(node(center_x, center_y, hub_radius, 0, "inside"))
+
+    return (
+        '<figure class="agent-map">'
+        f'<svg viewBox="0 0 640 376" role="img" aria-label="{html.escape(caption, quote=True)}">'
+        f"{''.join(spokes)}{''.join(nodes)}"
+        "</svg>"
+        f"<figcaption>{_inline(caption)}</figcaption>"
+        "</figure>\n"
     )
 
 
@@ -130,33 +261,41 @@ class _LessonRenderer(mistune.HTMLRenderer):
         self.kernel = kernel
         self.checks: list[Check] = []
 
+    def link(self, text: str, url: str, title: str | None = None) -> str:
+        """Links to other sites open in a new tab, so the lesson and its output stay open."""
+        rendered = super().link(text, url, title)
+        if url.startswith(("http://", "https://")):
+            rendered = rendered.replace("<a ", '<a target="_blank" rel="noopener noreferrer" ', 1)
+        return rendered
+
     def block_code(self, code: str, info: str | None = None) -> str:
         language = info.split()[0] if info and info.strip() else ""
         if language == "check":
             return self._check_block(code)
         if language == "key":
             return self._key_block(code)
+        if language == "agent-map":
+            return _agent_map(code)
 
         body = html.escape(code.rstrip("\n"))
         if language == "solution":
             return (
                 '<details class="solution"><summary>Show solution</summary>'
-                f'<pre class="code"><code>{body}</code></pre></details>\n'
+                f"{_plain_block(body, 'solution').rstrip()}</details>\n"
             )
         if language in RUNNABLE_LANGUAGES:
             return _cell(body, "bash")
         if language == "python" and self.kernel == "python":
             return _cell(body, "python")
         if language in TERMINAL_LANGUAGES:
+            run_in_shell = '<button type="button" class="btn btn-run">Run in shell</button>'
             return (
-                '<div class="cmd">'
+                '<div class="cmd codeblock">'
+                f"{_code_head('terminal', _COPY_BUTTON + run_in_shell)}"
                 f"<pre><code>{body}</code></pre>"
-                '<div class="cmd-bar">'
-                '<button type="button" class="btn btn-run">Run in shell</button>'
-                '<button type="button" class="btn btn-copy">Copy</button>'
-                "</div></div>\n"
+                "</div>\n"
             )
-        return f'<pre class="code"><code>{body}</code></pre>\n'
+        return _plain_block(body, language or "text")
 
     def _check_block(self, code: str) -> str:
         fields = _yaml_mapping(code, "check", {"task", "command", "python", "hint", "success"})

@@ -29,7 +29,7 @@
 
     // The label names what pressing the button will switch to.
     const label = () => {
-      button.textContent = current() === "dark" ? "Light mode" : "Dark mode";
+      button.textContent = current() === "dark" ? "☀️ Light mode" : "🌙 Dark mode";
     };
     label();
 

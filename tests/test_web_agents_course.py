@@ -1,7 +1,8 @@
 """Run every cell of the "Agents from Scratch" course against a stand-in model.
 
-No network and no real API key: a prelude replaces ``httpx.post`` and
-``httpx.get`` inside the kernel with a scripted fake that speaks the same JSON
+No network and no real API key: a prelude replaces ``httpx.post``,
+``httpx.get``, and ``requests.post`` inside the kernel with a scripted fake that
+speaks the same JSON
 protocol the lessons teach. This proves each lesson's code runs top to bottom
 and that its graded checks pass once the exercise is solved.
 """
@@ -33,13 +34,28 @@ EXPECTED_ORDER = [
 ]
 
 # Cells that are meant to end in an error, by lesson: the lesson shows the crash on purpose.
-EXPECTED_ERRORS = {"guardrails": ["KeyError", "ValueError"]}
+EXPECTED_ERRORS = {
+    # Start Here has a cell with a deliberate syntax error for the learner to fix.
+    "start-here": ["SyntaxError"],
+    "guardrails": ["KeyError", "ValueError"],
+}
+
+# An exercise stub is a Python cell the learner has to complete.
+_STUB_MARKERS = ("FIXME", "TODO")
+
+
+def _is_stub(kind: str, code: str) -> bool:
+    return kind == "python" and any(marker in code for marker in _STUB_MARKERS)
+
 
 _FENCE = re.compile(r"^```(python|solution|check)\n(.*?)^```", re.MULTILINE | re.DOTALL)
 
 PRELUDE = r"""
 import json as _json
-import httpx
+
+# Aliased so the stand-in does not hide a lesson that forgets its own import.
+import httpx as _httpx
+import requests as _requests
 
 
 class _Reply:
@@ -74,7 +90,7 @@ def _fake_post(url, headers=None, json=None, timeout=None):
         return _Reply({"results": [result]})
 
     assert headers["Authorization"].startswith("Bearer nvapi-"), "the key was not sent"
-    assert json["stream"] is False
+    assert json.get("stream") is False, "the request must send stream: False"
     messages = json["messages"]
     system = messages[0]["content"] if messages[0]["role"] == "system" else ""
     last = messages[-1]["content"]
@@ -94,8 +110,13 @@ def _fake_post(url, headers=None, json=None, timeout=None):
     return _chat("Stub answer about: " + last[:40])
 
 
-httpx.post = _fake_post
-httpx.get = lambda *args, **kwargs: _Reply({}, 200)
+def _fake_get(url, headers=None, timeout=None, **kwargs):
+    return _Reply({"data": [{"id": "nvidia/nemotron-3.5-super-vl-120b-a12b"}]})
+
+
+# A lesson may use either library; both get the same stand-in.
+_httpx.post = _requests.post = _fake_post
+_httpx.get = _requests.get = _fake_get
 """
 
 
@@ -106,14 +127,14 @@ def _blocks(path: Path) -> list[tuple[str, str]]:
 def _solved(blocks: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """The lesson as a learner who solved every exercise would run it.
 
-    Each exercise stub (a Python cell containing FIXME) is replaced by the
+    Each exercise stub (a Python cell containing FIXME or TODO) is replaced by the
     solution block that follows it, and the solution blocks themselves are dropped.
     """
     result = []
     for index, (kind, code) in enumerate(blocks):
         if kind == "solution":
             continue
-        if kind == "python" and "FIXME" in code:
+        if _is_stub(kind, code):
             code = next(body for later, body in blocks[index + 1 :] if later == "solution")
         result.append((kind, code))
     return result
@@ -191,7 +212,7 @@ def test_every_cell_runs_and_every_check_passes(path, tmp_path):
 def test_exercise_stubs_fail_their_check_until_solved(path, tmp_path):
     """An exercise must not pass before the learner does the work."""
     blocks = _blocks(path)
-    if not any(kind == "python" and "FIXME" in code for kind, code in blocks):
+    if not any(_is_stub(kind, code) for kind, code in blocks):
         pytest.skip("no exercise in this lesson")
 
     async def body():

@@ -255,6 +255,7 @@ source = { editable = "." }
 dependencies = [
     { name = "ansi2html" },
     { name = "colorama" },
+    { name = "httpx" },
     { name = "ipykernel" },
     { name = "ipywidgets" },
     { name = "jupyterlab" },
@@ -265,6 +266,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "terminado" },
     { name = "tornado" },
 ]
@@ -280,6 +282,7 @@ dev = [
 requires-dist = [
     { name = "ansi2html", specifier = ">=1.9,<2" },
     { name = "colorama", specifier = ">=0.4.6,<1" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "ipykernel", specifier = ">=7.3.0,<8" },
     { name = "ipywidgets", specifier = ">=8.1.8,<9" },
     { name = "jupyterlab", specifier = ">=4.6.1,<5" },
@@ -292,6 +295,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1,<10" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.32" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.21" },
     { name = "terminado", specifier = ">=0.18" },
     { name = "tornado", specifier = ">=6.5" },

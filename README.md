@@ -87,6 +87,14 @@ cell you can edit and run, with the output underneath.
 uv run python -m web.server      # then open http://127.0.0.1:3000
 ```
 
+When editing lessons, add `--dev`. Changes to the Markdown files, templates, and static
+files then show up when you refresh the page, with no restart. A lesson that fails to parse
+is reported in the server log and the last good version keeps being served.
+
+```bash
+uv run python -m web.server --dev
+```
+
 | Course | What it covers | Cells |
 |---|---|---|
 | 1. Agents from Scratch | Build an agent in plain Python, one piece at a time: a bare model call, memory, tools, web search, the agent loop, guardrails, and why an agent needs a sandbox | Python, sharing one kernel per lesson |

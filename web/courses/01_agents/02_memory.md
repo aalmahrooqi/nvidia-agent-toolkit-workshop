@@ -8,6 +8,10 @@ kernel: python
 Chat assistants seem to remember what you said a moment ago. The model does not. In this
 lesson you watch it forget, and then build the memory yourself.
 
+```agent-map
+step: memory
+```
+
 ## What you will do
 
 - See that every call to the model starts from nothing

@@ -9,6 +9,10 @@ A model's knowledge stops on the day its training data was collected. Ask about 
 after that and it either says it does not know or, worse, answers confidently from stale
 information. In this lesson you give it a tool that reaches the live web.
 
+```agent-map
+step: search
+```
+
 ## What you will do
 
 - See the model answer from out-of-date knowledge

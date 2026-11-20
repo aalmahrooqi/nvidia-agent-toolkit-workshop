@@ -9,6 +9,11 @@ Your agent works, and it recovers from its own mistakes. This lesson is about so
 different: an agent that does exactly what it is told, by the wrong person. You will see why
 no amount of careful Python or careful prompting solves it, and what does.
 
+```agent-map
+step: sandbox
+caption: "Built so far: everything inside the agent. The last piece cannot be built in Python: a sandbox around it."
+```
+
 ## What you will do
 
 - See what your agent's process is able to reach

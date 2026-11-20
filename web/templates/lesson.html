@@ -10,7 +10,7 @@
 </head>
 <body data-lesson="{{ lesson.slug }}" data-kernel="{{ lesson.kernel }}"{% if not lesson.shell %} class="no-shell"{% end %}>
   <header class="topbar">
-    <a class="brand" href="/">Agentic AI 101</a>
+    <a class="brand" href="/"><img class="brand-logo" src="{{ static_url('nvidia-logo.png') }}" alt="NVIDIA" width="99" height="34"><span>Agentic AI 101</span></a>
     <label class="picker">
       <span class="picker-label">Lesson</span>
       <select id="lesson-picker" aria-label="Go to lesson">
@@ -20,10 +20,10 @@
       </select>
     </label>
     <nav class="steps" aria-label="Lesson order">
-      {% if lesson.kernel %}<button type="button" id="kernel-restart" class="btn" title="Start a clean Python interpreter with no variables">Restart kernel</button>{% end %}
       {% if previous %}<a href="/learn/{{ previous.slug }}" title="{{ previous.title }}">← Previous</a>{% end %}
       {% if following %}<a href="/learn/{{ following.slug }}" title="{{ following.title }}">Next →</a>{% end %}
-      <button type="button" id="theme-toggle" class="btn">Dark mode</button>
+      {% if lesson.kernel %}<button type="button" id="kernel-restart" class="btn" title="Start a clean Python interpreter with no variables">Restart kernel</button>{% end %}
+      <button type="button" id="theme-toggle" class="btn">🌙 Dark mode</button>
     </nav>
   </header>
 

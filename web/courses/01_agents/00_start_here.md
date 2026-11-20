@@ -12,6 +12,10 @@ what is inside it, because you typed every part.
 
 There is no framework and nothing hidden. The whole agent ends up at about 70 lines.
 
+```agent-map
+step: none
+```
+
 ## What you will build
 
 | Lesson | The problem | What you add |
@@ -26,7 +30,7 @@ There is no framework and nothing hidden. The whole agent ends up at about 70 li
 
 ## How this page works
 
-Each grey box is a **cell**, like a cell in a Jupyter notebook.
+Each box is a **cell**, like a cell in a Jupyter notebook.
 
 - Press **Run** (or Shift+Enter) to run it. The output appears underneath.
 - You can edit a cell before running it. **Reset** puts the original back.
@@ -47,13 +51,18 @@ Now run this one. It uses `greeting` from the cell above:
 greeting.upper()
 ```
 
+You can also edit the cells and add your own code, for example, try fixing this syntax error:
+```python
+print("Hey, welcome to the course!)
+```
+
 If you ran them in order you see `'CELLS SHARE STATE'`. Each lesson has its own session, so
 variables do not carry over from one lesson to the next.
 
 ## Your NVIDIA API key
 
 The model you will talk to is hosted by NVIDIA. Your own code sends the requests, so it needs
-your API key. Generate an API key from [build.nvidia.com](build.nvidia.com) .Paste it here:
+your API key. Generate an API key from [build.nvidia.com](https://build.nvidia.com). Paste it here:
 
 ```key
 name: NVIDIA_API_KEY
@@ -68,6 +77,20 @@ Confirm your cells can see it. This prints whether the key is set, never the key
 import os
 
 "NVIDIA_API_KEY" in os.environ
+```
+
+We can view all the models that are available to us:
+
+```python
+import requests
+
+response = requests.get(
+    "https://integrate.api.nvidia.com/v1/models",
+    headers={"Authorization": f"Bearer {os.environ['NVIDIA_API_KEY']}"},
+)
+response.raise_for_status()
+
+[model["id"] for model in response.json()["data"]]
 ```
 
 ```check

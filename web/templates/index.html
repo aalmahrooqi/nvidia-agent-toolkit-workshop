@@ -9,9 +9,9 @@
 </head>
 <body class="home">
   <header class="topbar">
-    <a class="brand" href="/">Agentic AI 101</a>
+    <a class="brand" href="/"><img class="brand-logo" src="{{ static_url('nvidia-logo.png') }}" alt="NVIDIA" width="99" height="34"><span>Agentic AI 101</span></a>
     <nav class="steps" aria-label="Display">
-      <button type="button" id="theme-toggle" class="btn">Dark mode</button>
+      <button type="button" id="theme-toggle" class="btn">🌙 Dark mode</button>
     </nav>
   </header>
 
@@ -19,7 +19,7 @@
     <div class="hero">
       <img class="hero-logo" src="{{ static_url('nvidia-logo.png') }}" alt="NVIDIA" width="200" height="69">
       <h1>Agentic AI 101</h1>
-      <p class="subtitle">Build an AI agent from scratch, then learn to run one safely. Every lesson runs in this page: edit a cell, press Run, read the output.</p>
+      <p class="subtitle">Build an AI agent from scratch, then learn to run one safely</p>
     </div>
 
     {% for number, course in enumerate(courses, start=1) %}

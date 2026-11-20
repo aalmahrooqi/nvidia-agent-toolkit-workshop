@@ -9,6 +9,10 @@ So far you have run each tool call by hand: call the model, read its request, ru
 call the model again. In this lesson you put those steps in a loop. That loop is what the
 word "agent" means.
 
+```agent-map
+step: loop
+```
+
 ## What you will do
 
 - Ask a question that needs more than one tool

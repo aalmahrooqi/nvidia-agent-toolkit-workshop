@@ -9,6 +9,10 @@ A model can only produce text. It cannot look at a clock, open a file, or do any
 the world. In this lesson you give it a way to ask your program to do those things. That one
 idea, a **tool**, is what turns a chatbot into the start of an agent.
 
+```agent-map
+step: tools
+```
+
 ## What you will do
 
 - Ask the model something it cannot possibly know

@@ -76,11 +76,87 @@ def test_python_fences_are_cells_only_in_kernel_lessons():
     assert "data-kind" not in plain.html and "not_a_cell = True" in plain.html
 
 
+def test_every_cell_has_a_footer_for_its_run_status():
+    html = parse_lesson(NOTEBOOK_TEXT, "notebook").html
+    assert html.count('class="cell-foot" hidden') == html.count('data-kind="python"') == 2
+    script = (REPO_ROOT / "web" / "static" / "app.js").read_text(encoding="utf-8")
+    assert "· no output" in script, "a cell with no output should still say that it ran"
+
+
 def test_key_block_renders_a_password_field_and_never_a_value():
     html = parse_lesson(NOTEBOOK_TEXT, "notebook").html
     assert 'data-key-name="NVIDIA_API_KEY"' in html
     assert 'type="password"' in html and 'autocomplete="off"' in html
     assert "Stays in memory." in html
+
+
+def test_external_links_open_in_a_new_tab_and_internal_ones_do_not():
+    text = (
+        "---\ntitle: T\n---\n"
+        "[NVIDIA](https://build.nvidia.com) and [next](/learn/memory) and "
+        "![diagram](/assets/diagrams/x.png)\n"
+    )
+    html = parse_lesson(text, "t").html
+    assert (
+        '<a target="_blank" rel="noopener noreferrer" href="https://build.nvidia.com">NVIDIA</a>'
+        in html
+    )
+    assert '<a href="/learn/memory">next</a>' in html
+    assert html.count("target=") == 1
+
+
+def test_links_work_inside_key_hints_and_check_text():
+    text = (
+        "---\ntitle: T\n---\n"
+        "```key\nname: NVIDIA_API_KEY\nlabel: Key\n"
+        "hint: Get one at [build.nvidia.com](https://build.nvidia.com), see `docs`.\n```\n\n"
+        '```check\ntask: Read [Memory](/learn/memory) first.\ncommand: "true"\n'
+        "hint: A <b>tag</b> and [bad](javascript:alert(1)) stay text.\n```\n"
+    )
+    html = parse_lesson(text, "t").html
+    assert (
+        '<a target="_blank" rel="noopener noreferrer" href="https://build.nvidia.com">'
+        "build.nvidia.com</a>" in html
+    )
+    assert "<code>docs</code>" in html
+    assert '<a href="/learn/memory">Memory</a>' in html
+    assert "<b>" not in html and "&lt;b&gt;tag&lt;/b&gt;" in html
+    assert 'href="javascript' not in html
+
+
+def _map_html(body: str) -> str:
+    return parse_lesson(f"---\ntitle: T\n---\n```agent-map\n{body}\n```\n", "t").html
+
+
+def test_agent_map_fills_in_up_to_the_lessons_step():
+    empty = _map_html("step: none")
+    assert empty.count("am-node am-unknown") == 7 and "am-built" not in empty
+    assert "Nothing is built yet" in empty
+
+    first = _map_html("step: llm")
+    assert first.count("am-node am-now") == 1 and first.count("am-node am-unknown") == 6
+    assert "This lesson adds: LLM." in first and "🧠" in first
+
+    middle = _map_html("step: tools")
+    assert middle.count("am-node am-built") == 2
+    assert middle.count("am-node am-now") == 1
+    assert middle.count("am-node am-unknown") == 4
+    assert "Built so far: LLM, Memory. This lesson adds: Tools." in middle
+    # A piece that is still to come shows a question mark, not its name.
+    assert "Guardrails" not in middle and "Sandbox" not in middle
+
+    last = _map_html("step: sandbox\ncaption: Everything except the `sandbox`.")
+    assert last.count("am-node am-built") == 6 and "am-unknown" not in last
+    assert "Everything except the <code>sandbox</code>." in last
+
+
+def test_agent_map_rejects_unknown_steps():
+    for body in ("step: database", "stage: llm"):
+        try:
+            _map_html(body)
+        except LessonError:
+            continue
+        raise AssertionError(f"accepted a malformed agent-map: {body}")
 
 
 def test_python_checks_stay_on_the_server():
@@ -297,6 +373,12 @@ class TestCoursePages(_SiteCase):
         body = self.fetch("/learn/memory").body.decode()
         assert "· Agentic AI 101</title>" in body
         assert 'id="theme-toggle"' in body and "/static/theme.js" in body
+        assert '<img class="brand-logo"' in body and 'alt="NVIDIA"' in body
+        assert "🌙 Dark mode" in body
+
+    def test_theme_button_labels_carry_an_emoji_for_each_mode(self):
+        script = (REPO_ROOT / "web" / "static" / "theme.js").read_text(encoding="utf-8")
+        assert "☀️ Light mode" in script and "🌙 Dark mode" in script
 
     def test_theme_styles_cover_system_default_and_both_explicit_choices(self):
         css = (REPO_ROOT / "web" / "static" / "style.css").read_text(encoding="utf-8")
@@ -321,3 +403,63 @@ class TestCoursePages(_SiteCase):
         config = self._app.settings["config"]
         for lesson in config.lessons:
             assert self.fetch(f"/learn/{lesson.slug}").code == 200, lesson.slug
+
+
+class TestDevReload(_SiteCase):
+    """With --dev, an edited lesson shows up on the next request without a restart."""
+
+    def get_app(self):
+        import tempfile
+        from pathlib import Path
+
+        from web.server import make_app
+
+        self.courses_dir = Path(tempfile.mkdtemp())
+        course = self.courses_dir / "01_demo"
+        course.mkdir()
+        (course / "course.yaml").write_text("title: Demo\n", encoding="utf-8")
+        self.lesson_file = course / "01_intro.md"
+        self.write_lesson("First version")
+
+        courses = tuple(load_courses(self.courses_dir))
+        config = Config(
+            lessons=courses[0].lessons,
+            courses=courses,
+            courses_dir=self.courses_dir,
+            lab_env={},
+            lab_cwd=REPO_ROOT,
+            shell_command=("bash", "--noprofile", "--norc"),
+        )
+        app, self.term_manager = make_app(config, dev=True)
+        return app
+
+    def write_lesson(self, body, *, title="Intro"):
+        self.lesson_file.write_text(f"---\ntitle: {title}\n---\n{body}\n", encoding="utf-8")
+        # Make sure the change is visible even on a coarse filesystem clock.
+        bumped = self.lesson_file.stat().st_mtime_ns + 2_000_000_000
+        os.utime(self.lesson_file, ns=(bumped, bumped))
+
+    def page(self):
+        return self.fetch("/learn/intro").body.decode()
+
+    def test_edits_appear_on_refresh(self):
+        assert "First version" in self.page()
+        self.write_lesson("Second version", title="Renamed")
+        body = self.page()
+        assert "Second version" in body and "First version" not in body
+        assert "<h1>Renamed</h1>" in body
+
+    def test_a_broken_edit_keeps_the_last_good_version(self):
+        assert "First version" in self.page()
+        self.lesson_file.write_text("no front matter at all\n", encoding="utf-8")
+        bumped = self.lesson_file.stat().st_mtime_ns + 4_000_000_000
+        os.utime(self.lesson_file, ns=(bumped, bumped))
+        assert "First version" in self.page()
+        self.write_lesson("Fixed version")
+        assert "Fixed version" in self.page()
+
+    def test_new_lesson_files_are_picked_up(self):
+        self.page()
+        extra = self.lesson_file.with_name("02_extra.md")
+        extra.write_text("---\ntitle: Extra\n---\nMore\n", encoding="utf-8")
+        assert self.fetch("/learn/extra").code == 200

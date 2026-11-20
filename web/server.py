@@ -2,7 +2,8 @@
 
 Run from the repository root:
 
-    uv run python -m web.server
+    uv run python -m web.server          # serve the courses
+    uv run python -m web.server --dev    # also pick up edited lessons on refresh
 
 Everything is one process on the course host. The page talks to it these ways:
 
@@ -28,7 +29,7 @@ import os
 import re
 import signal
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -37,7 +38,7 @@ import tornado.web
 from terminado import TermSocket, UniqueTermManager
 
 from web.kernel import Kernel, KernelDied, KernelPool
-from web.lessons import Course, Lesson, load_courses
+from web.lessons import Course, Lesson, LessonError, load_courses
 
 WEB_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = WEB_ROOT.parent
@@ -72,6 +73,7 @@ class Config:
     lessons: tuple[Lesson, ...]
     lab_env: dict[str, str | None]
     courses: tuple[Course, ...] = ()
+    courses_dir: Path | None = None
     lab_cwd: Path = REPO_ROOT
     token: str = ""
     check_timeout: float = 25.0
@@ -165,6 +167,30 @@ class _AccessMixin:
         raise tornado.web.HTTPError(403, "A valid access token is required.")
 
 
+def reload_lessons(app: tornado.web.Application) -> None:
+    """Dev mode: re-read the course files if any of them changed since the last request."""
+    config: Config = app.settings["config"]
+    if config.courses_dir is None:
+        return
+    files = [p for p in config.courses_dir.rglob("*") if p.suffix in {".md", ".yaml"}]
+    stamp = (len(files), max((p.stat().st_mtime_ns for p in files), default=0))
+    if stamp == app.settings.get("courses_stamp"):
+        return
+    first_look = "courses_stamp" not in app.settings
+    app.settings["courses_stamp"] = stamp
+    if first_look:
+        return
+    try:
+        courses = tuple(load_courses(config.courses_dir))
+    except LessonError as exc:
+        # Keep serving the last version that parsed while the author fixes the file.
+        print(f"Lessons not reloaded: {exc}", flush=True)
+        return
+    lessons = tuple(lesson for course in courses for lesson in course.lessons)
+    app.settings["config"] = replace(config, courses=courses, lessons=lessons)
+    print("Lessons reloaded.", flush=True)
+
+
 class _PageHandler(_AccessMixin, tornado.web.RequestHandler):
     def set_default_headers(self) -> None:
         self.set_header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
@@ -173,6 +199,8 @@ class _PageHandler(_AccessMixin, tornado.web.RequestHandler):
 
     def prepare(self) -> None:
         self.require_access()
+        if self.settings.get("dev"):
+            reload_lessons(self.application)
 
 
 class IndexHandler(_PageHandler):
@@ -474,7 +502,9 @@ class TerminalHandler(_AccessMixin, TermSocket):
         self.require_access()
 
 
-def make_app(config: Config) -> tuple[tornado.web.Application, UniqueTermManager]:
+def make_app(
+    config: Config, *, dev: bool = False
+) -> tuple[tornado.web.Application, UniqueTermManager]:
     term_manager = UniqueTermManager(
         shell_command=list(config.shell_command),
         max_terminals=config.max_terminals,
@@ -496,6 +526,10 @@ def make_app(config: Config) -> tuple[tornado.web.Application, UniqueTermManager
         template_path=str(WEB_ROOT / "templates"),
         static_path=str(WEB_ROOT / "static"),
         config=config,
+        # Dev mode re-reads lessons, templates, and static files on every request.
+        dev=dev,
+        compiled_template_cache=not dev,
+        static_hash_cache=not dev,
         active_runs=set(),
         session_keys={},
         kernels=KernelPool(
@@ -532,7 +566,8 @@ def resolve_sandbox_name() -> str:
 def build_config(token: str) -> Config:
     from shared.utils.platform import openclaw_workspace_path
 
-    courses = load_courses(WEB_ROOT / "courses")
+    courses_dir = WEB_ROOT / "courses"
+    courses = load_courses(courses_dir)
     if not courses:
         raise SystemExit("No courses found in web/courses.")
 
@@ -543,6 +578,7 @@ def build_config(token: str) -> Config:
     return Config(
         lessons=tuple(lesson for course in courses for lesson in course.lessons),
         courses=tuple(courses),
+        courses_dir=courses_dir,
         token=token,
         lab_cwd=lab_cwd,
         lab_env={
@@ -561,10 +597,12 @@ def build_config(token: str) -> Config:
     )
 
 
-async def serve(config: Config, host: str, port: int) -> None:
-    app, term_manager = make_app(config)
+async def serve(config: Config, host: str, port: int, *, dev: bool = False) -> None:
+    app, term_manager = make_app(config, dev=dev)
     server = app.listen(port, address=host)
     print(f"Agentic AI 101: http://{host}:{port}/", flush=True)
+    if dev:
+        print("Dev mode: edited lessons show up when you refresh the page.", flush=True)
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -581,6 +619,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--host", default=os.environ.get("CLAW_WEB_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("CLAW_WEB_PORT", "3000")))
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        default=os.environ.get("CLAW_WEB_DEV") == "1",
+        help="re-read lessons, templates, and static files on each request",
+    )
     args = parser.parse_args()
 
     # The token comes from the environment only, so it never shows up in `ps`.
@@ -591,7 +635,7 @@ def main() -> None:
             "Set CLAW_WEB_TOKEN, or bind to 127.0.0.1 behind a Brev Secure Link."
         )
 
-    asyncio.run(serve(build_config(token), args.host, args.port))
+    asyncio.run(serve(build_config(token), args.host, args.port, dev=args.dev))
 
 
 if __name__ == "__main__":

@@ -23,6 +23,9 @@ dependencies = [
     "tornado>=6.5",
     "terminado>=0.18",
     "mistune>=3.1",
+    # HTTP clients the Agents from Scratch lessons call the model with
+    "httpx>=0.28",
+    "requests>=2.32",
 ]
 
 [project.optional-dependencies]

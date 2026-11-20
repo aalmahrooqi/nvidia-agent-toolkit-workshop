@@ -130,6 +130,7 @@
 
   function setCellState(cell, state, text) {
     cell.dataset.state = state;
+    cell.querySelector(".cell-foot").hidden = false;
     cell.querySelector(".cell-status").textContent = text;
   }
 
@@ -186,15 +187,17 @@
         }
       }
 
+      // The footer always reports the run, so a cell that prints nothing still visibly ran.
       const seconds = ((performance.now() - started) / 1000).toFixed(1);
+      const quiet = text ? "" : " · no output";
       if (!text) output.hidden = true;
-      if (exitCode === 0) setCellState(cell, "pass", `Done in ${seconds}s`);
-      else if (exitCode === null) setCellState(cell, "fail", "The run ended without a result.");
-      else if (cell.dataset.kind === "python") setCellState(cell, "fail", `Error after ${seconds}s`);
-      else setCellState(cell, "fail", `Exit code ${exitCode} after ${seconds}s`);
+      if (exitCode === 0) setCellState(cell, "pass", `✓ Done in ${seconds}s${quiet}`);
+      else if (exitCode === null) setCellState(cell, "fail", "✗ The run ended without a result.");
+      else if (cell.dataset.kind === "python") setCellState(cell, "fail", `✗ Error after ${seconds}s`);
+      else setCellState(cell, "fail", `✗ Exit code ${exitCode} after ${seconds}s`);
     } catch (error) {
-      if (controller.signal.aborted) setCellState(cell, "stopped", "Stopped");
-      else setCellState(cell, "fail", `Could not run the cell. ${error.message}`);
+      if (controller.signal.aborted) setCellState(cell, "stopped", "■ Stopped");
+      else setCellState(cell, "fail", `✗ Could not run the cell. ${error.message}`);
     } finally {
       cell.controller = null;
       runButton.disabled = false;
@@ -239,6 +242,7 @@
         for (const cell of document.querySelectorAll('.cell[data-kind="python"]')) {
           delete cell.dataset.state;
           cell.querySelector(".cell-status").textContent = "";
+          cell.querySelector(".cell-foot").hidden = true;
           const output = cell.querySelector(".cell-output");
           output.textContent = "";
           output.hidden = true;
@@ -381,10 +385,9 @@
       autosize(area);
       button.hidden = true;
     } else if (button.classList.contains("btn-run") || button.classList.contains("btn-copy")) {
-      const holder = button.closest(".cmd, .cell");
-      const code = holder.classList.contains("cell")
-        ? holder.querySelector(".cell-code").value
-        : holder.querySelector("code").textContent;
+      const holder = button.closest(".codeblock");
+      const area = holder.querySelector(".cell-code");
+      const code = area ? area.value : holder.querySelector("code").textContent;
       if (button.classList.contains("btn-run")) {
         runInShell(code);
       } else {

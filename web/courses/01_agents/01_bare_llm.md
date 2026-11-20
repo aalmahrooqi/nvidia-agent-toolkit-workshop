@@ -9,6 +9,10 @@ An agent is built around a large language model (LLM). Before adding anything to
 what a model is on its own: a service that takes text and returns text. That is the entire
 interface. Everything else in this course is code you write around it.
 
+```agent-map
+step: llm
+```
+
 ## What you will do
 
 - Send one request to a hosted model and read the raw response
@@ -39,7 +43,7 @@ response = httpx.post(
     },
     timeout=120,
 )
-response.status_code
+print(f"Response HTTP status: {response.status_code}")
 ```
 
 `200` means it worked. If you see `401`, the key is wrong: go back to
@@ -124,13 +128,11 @@ which tools it has and how to ask for them.
 
 ## Your turn
 
-Change the system prompt in this cell so the model replies with **exactly one word**, then
-run it:
+Add system prompt in this cell so the model replies with **exactly one word**, and a user message with a prompt like *"What is the capital of Egypt?"*, then run it:
 
 ```python
 messages = [
-    {"role": "system", "content": "FIXME: tell the model to answer with exactly one word."},
-    {"role": "user", "content": "What is the capital of France?"},
+    # TODO: ADD SYSTEM AND USER MESSAGES
 ]
 one_word = call_model(messages)
 print(one_word)
@@ -141,16 +143,18 @@ task: "`call_model` works, and `one_word` holds a one-word answer."
 python: |
   assert callable(call_model), "Run the cell that defines call_model."
   assert isinstance(reply, str) and reply.strip(), "Run the 'Name three planets' cell first."
-  assert "FIXME" not in messages[0]["content"], "Replace the FIXME in the system prompt."
+  roles = [message.get("role") for message in messages]
+  assert roles == ["system", "user"], f"`messages` should hold a system message, then a user message. It has these roles: {roles}"
+  assert all(str(message.get("content", "")).strip() for message in messages), "Both messages need some content."
   assert len(one_word.strip().split()) == 1, f"Expected one word, got: {one_word!r}"
-hint: "A system prompt such as `Answer with exactly one word and no punctuation.` works. If the model still adds words, make the instruction firmer."
+hint: 'Put a `system` message first, for example `{"role": "system", "content": "Answer with exactly one word and no punctuation."}`, then a `user` message with your question. If the model still adds words, make the instruction firmer.'
 success: "You sent requests to a model and shaped its behavior with a system prompt."
 ```
 
 ```solution
 messages = [
     {"role": "system", "content": "Answer with exactly one word and no punctuation."},
-    {"role": "user", "content": "What is the capital of France?"},
+    {"role": "user", "content": "What is the capital of Egypt?"},
 ]
 one_word = call_model(messages)
 print(one_word)
