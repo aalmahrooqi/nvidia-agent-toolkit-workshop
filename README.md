@@ -3,9 +3,10 @@ SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES.
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Claw Training, Distilled
+# Agentic AI 101
 
-A half-day, hands-on course for NVIDIA Solution Architects on
+Two hands-on courses for NVIDIA Solution Architects. The first builds an AI agent from
+scratch in plain Python. The second, described below, is a half-day course on
 [NemoClaw](https://docs.nvidia.com/nemoclaw/latest/), [OpenShell](https://docs.nvidia.com/openshell/),
 and [OpenClaw](https://docs.openclaw.ai/). One setup script and seven notebooks take you from the
 architecture to a policy-constrained agent that calls real APIs.
@@ -79,30 +80,35 @@ uv run jupyter lab tracks/01-concepts-architecture/01_concepts.ipynb
 
 ### Workshop site
 
-The whole course is also available as a web site: each lesson on the left, a live shell on the
-host beside it. Code blocks are cells, as in a notebook: learners edit them, press Run, and see
-the output underneath. They also get graded checks and can chat with the agent in the shell.
+Both courses are available as a web site that works like a notebook: every code block is a
+cell you can edit and run, with the output underneath.
 
 ```bash
 uv run python -m web.server      # then open http://127.0.0.1:3000
 ```
 
-- **Setup happens in the page.** The first lesson asks for your NVIDIA API key in the shell
-  (hidden input) and runs `setup.sh` for you, so running `./setup.sh` beforehand is optional.
-  The key goes only to that one setup run; it is not stored or exported.
-- **Lessons** are Markdown files in [`web/lessons/`](web/lessons/), converted from the
-  notebooks. A `bash` block becomes an editable cell with a Run button and its output
-  underneath. A `terminal` block is for interactive commands and types into the live shell.
-  A `check` block becomes a graded check whose command stays on the server. A `solution`
-  block renders collapsed.
-- **The shell** starts in `lab/`, a scratch folder for the policy files and exercises learners
-  write. It has `$CLAW_SANDBOX` set and no `NVIDIA_API_KEY`.
-- **`claw`** ([`web/lab.py`](web/lab.py)) is a small helper on the shell's PATH for steps that
-  take more than one CLI call, such as creating a sandbox and waiting until it is Ready.
-- **The server** is one Python process with no build step. It serves a shell on the host, so
-  it binds to loopback and refuses any other address unless `CLAW_WEB_TOKEN` is set.
+| Course | What it covers | Cells |
+|---|---|---|
+| 1. Agents from Scratch | Build an agent in plain Python, one piece at a time: a bare model call, memory, tools, web search, the agent loop, guardrails, and why an agent needs a sandbox | Python, sharing one kernel per lesson |
+| 2. Claw Training | Install NemoClaw, write sandbox policy, and run a policy-constrained agent | Shell, plus a live shell for interactive steps |
 
-The notebooks in `tracks/` remain the source the lessons were converted from.
+- **Lessons** are Markdown files under [`web/courses/`](web/courses/), one folder per course.
+  A `bash` block is a shell cell. In a lesson with `kernel: python`, a `python` block is a
+  Python cell, and all of a lesson's Python cells share variables. A `terminal` block types an
+  interactive command into the live shell. A `check` block is a graded check whose grading
+  code stays on the server. A `key` block is a field for an API key. A `solution` block
+  renders collapsed.
+- **API keys** entered in the page are held in server memory for that browser session only.
+  They are never written to disk or sent back, and they reach only that session's Python
+  cells. Course 1 needs an NVIDIA API key; a Tavily key is optional.
+- **Course 2 setup happens in the page.** Its first lesson asks for the NVIDIA API key in the
+  shell (hidden input) and runs `setup.sh`, so running `./setup.sh` beforehand is optional.
+- **The shell** in Course 2 starts in `lab/`, a scratch folder for the files learners write.
+  **`claw`** ([`web/lab.py`](web/lab.py)) is a small helper on its PATH.
+- **The server** is one Python process with no build step. It runs code on the host, so it
+  binds to loopback and refuses any other address unless `CLAW_WEB_TOKEN` is set.
+
+The notebooks in `tracks/` remain the source the Course 2 lessons were converted from.
 
 ### Deploy as a Brev Launchable
 

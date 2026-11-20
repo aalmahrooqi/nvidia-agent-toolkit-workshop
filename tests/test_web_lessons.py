@@ -15,7 +15,7 @@ from web.lessons import load_lessons
 from web.server import run_check
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LESSON_DIR = REPO_ROOT / "web" / "lessons"
+LESSON_DIR = REPO_ROOT / "web" / "courses" / "02_claw"
 LESSONS = {lesson.slug: lesson for lesson in load_lessons(LESSON_DIR)}
 
 EXPECTED_ORDER = [

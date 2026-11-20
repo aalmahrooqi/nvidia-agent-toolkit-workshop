@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agentic AI 101</title>
+  <script src="{{ static_url('theme.js') }}"></script>
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
+</head>
+<body class="home">
+  <header class="topbar">
+    <a class="brand" href="/">Agentic AI 101</a>
+    <nav class="steps" aria-label="Display">
+      <button type="button" id="theme-toggle" class="btn">Dark mode</button>
+    </nav>
+  </header>
+
+  <main class="catalog">
+    <div class="hero">
+      <img class="hero-logo" src="{{ static_url('nvidia-logo.png') }}" alt="NVIDIA" width="200" height="69">
+      <h1>Agentic AI 101</h1>
+      <p class="subtitle">Build an AI agent from scratch, then learn to run one safely. Every lesson runs in this page: edit a cell, press Run, read the output.</p>
+    </div>
+
+    {% for number, course in enumerate(courses, start=1) %}
+    <section class="course">
+      <p class="eyebrow">Course {{ number }} · {{ len(course.lessons) }} lessons · about {{ course.minutes // 60 }}h {{ course.minutes % 60 }}m</p>
+      <h2>{{ course.title }}</h2>
+      {% if course.summary %}<p>{{ course.summary }}</p>{% end %}
+      <ol class="course-lessons">
+        {% for lesson in course.lessons %}
+        <li>
+          <a href="/learn/{{ lesson.slug }}">{{ lesson.title }}</a>
+          {% if lesson.minutes %}<span class="minutes">{{ lesson.minutes }} min</span>{% end %}
+        </li>
+        {% end %}
+      </ol>
+      <a class="btn btn-start" href="/learn/{{ course.lessons[0].slug }}">Start course {{ number }}</a>
+    </section>
+    {% end %}
+  </main>
+</body>
+</html>

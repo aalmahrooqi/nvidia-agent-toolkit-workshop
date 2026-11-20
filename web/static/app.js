@@ -1,94 +1,126 @@
-// Lesson page behaviour: the live shell, "Run in shell" buttons, and graded checks.
+// Lesson page behaviour: runnable cells, graded checks, API key fields, and the live shell.
 (() => {
   "use strict";
 
   const lesson = document.body.dataset.lesson;
-  const statusEl = document.getElementById("shell-status");
-  const terminalEl = document.getElementById("terminal");
+  const API_HEADERS = { "Content-Type": "application/json", "X-Requested-With": "claw-web" };
 
-  // ---- live shell ---------------------------------------------------------
+  // ---- browser session ----------------------------------------------------
+  // A random id that ties this browser to its Python kernels and to the API keys
+  // it entered. It is not a login; the keys themselves stay on the server.
+  function sessionId() {
+    const KEY = "claw-training:session";
+    try {
+      let id = window.localStorage.getItem(KEY);
+      if (!id) {
+        id = crypto.randomUUID().replaceAll("-", "");
+        window.localStorage.setItem(KEY, id);
+      }
+      return id;
+    } catch {
+      // Storage is unavailable: keep one id for as long as this page lives.
+      if (!sessionId.fallback) sessionId.fallback = crypto.randomUUID().replaceAll("-", "");
+      return sessionId.fallback;
+    }
+  }
+  const session = sessionId();
+
+  function post(path, body) {
+    return fetch(path, { method: "POST", headers: API_HEADERS, body: JSON.stringify(body) });
+  }
+
+  // ---- live shell (only on lessons that have one) --------------------------
   // The server speaks terminado's protocol: JSON arrays such as
   // ["stdin", text] and ["set_size", rows, cols] going up, ["stdout", text] coming down.
-  const term = new Terminal({
-    cursorBlink: true,
-    fontSize: 13,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
-    scrollback: 5000,
-    theme: { background: "#0d1110", foreground: "#d7e0d8", cursor: "#76b900" },
-  });
-  const fit = new FitAddon.FitAddon();
-  term.loadAddon(fit);
-  term.open(terminalEl);
+  const terminalEl = document.getElementById("terminal");
+  let runInShell = () => {};
 
-  let socket = null;
-  const queued = [];
+  if (terminalEl) {
+    const statusEl = document.getElementById("shell-status");
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+      scrollback: 5000,
+      theme: { background: "#0d1110", foreground: "#d7e0d8", cursor: "#76b900" },
+    });
+    const fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(terminalEl);
 
-  function setStatus(text) {
-    statusEl.textContent = text;
-    statusEl.dataset.state = text;
-  }
+    let socket = null;
+    const queued = [];
 
-  function send(message) {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
-      return true;
-    }
-    return false;
-  }
-
-  function resize() {
-    // Ignore the near-zero sizes reported while the page is still laying out;
-    // sending them would make the shell wrap its prompt one character per line.
-    const size = fit.proposeDimensions();
-    if (!size || size.cols < 20 || size.rows < 5) return;
-    fit.fit();
-    send(["set_size", term.rows, term.cols]);
-  }
-
-  function connect() {
-    if (socket) {
-      socket.onclose = null;
-      socket.close();
-    }
-    setStatus("connecting");
-    const scheme = window.location.protocol === "https:" ? "wss" : "ws";
-    const current = new WebSocket(`${scheme}://${window.location.host}/ws/term`);
-    socket = current;
-
-    current.onopen = () => {
-      setStatus("connected");
-      resize();
-      while (queued.length) send(["stdin", queued.shift()]);
+    const setStatus = (text) => {
+      statusEl.textContent = text;
+      statusEl.dataset.state = text;
     };
-    current.onmessage = (event) => {
-      const [kind, data] = JSON.parse(event.data);
-      if (kind === "stdout") term.write(data);
-    };
-    current.onclose = () => {
-      if (socket === current) setStatus("disconnected");
-    };
-  }
 
-  term.onData((data) => send(["stdin", data]));
-  new ResizeObserver(() => resize()).observe(terminalEl);
-  document.getElementById("shell-reconnect").addEventListener("click", () => {
-    term.reset();
-    connect();
-  });
+    const send = (message) => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(message));
+        return true;
+      }
+      return false;
+    };
 
-  // Type a command block into the shell, one Enter per line.
-  function runInShell(text) {
-    const input = text.replace(/\s+$/, "").replace(/\r?\n/g, "\r") + "\r";
-    if (!send(["stdin", input])) {
-      queued.push(input);
+    const resize = () => {
+      // Ignore the near-zero sizes reported while the page is still laying out;
+      // sending them would make the shell wrap its prompt one character per line.
+      const size = fit.proposeDimensions();
+      if (!size || size.cols < 20 || size.rows < 5) return;
+      fit.fit();
+      send(["set_size", term.rows, term.cols]);
+    };
+
+    const connect = () => {
+      if (socket) {
+        socket.onclose = null;
+        socket.close();
+      }
+      setStatus("connecting");
+      const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+      const current = new WebSocket(`${scheme}://${window.location.host}/ws/term`);
+      socket = current;
+
+      current.onopen = () => {
+        setStatus("connected");
+        resize();
+        while (queued.length) send(["stdin", queued.shift()]);
+      };
+      current.onmessage = (event) => {
+        const [kind, data] = JSON.parse(event.data);
+        if (kind === "stdout") term.write(data);
+      };
+      current.onclose = () => {
+        if (socket === current) setStatus("disconnected");
+      };
+    };
+
+    term.onData((data) => send(["stdin", data]));
+    new ResizeObserver(() => resize()).observe(terminalEl);
+    document.getElementById("shell-reconnect").addEventListener("click", () => {
+      term.reset();
       connect();
-    }
-    term.focus();
+    });
+
+    // Type a command block into the shell, one Enter per line.
+    runInShell = (text) => {
+      const input = text.replace(/\s+$/, "").replace(/\r?\n/g, "\r") + "\r";
+      if (!send(["stdin", input])) {
+        queued.push(input);
+        connect();
+      }
+      term.focus();
+    };
+
+    connect();
   }
 
   // ---- cells --------------------------------------------------------------
   // A cell is editable code with a Run button. The server runs it and streams
   // the output back as newline-delimited JSON: {"output": text} ... {"exit": code}.
+  // Bash cells each run on their own; Python cells share one kernel per lesson.
   const MAX_OUTPUT_CHARS = 200000;
 
   function autosize(area) {
@@ -121,8 +153,13 @@
     try {
       const response = await fetch("/api/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Requested-With": "claw-web" },
-        body: JSON.stringify({ code: cell.querySelector(".cell-code").value }),
+        headers: API_HEADERS,
+        body: JSON.stringify({
+          code: cell.querySelector(".cell-code").value,
+          kind: cell.dataset.kind || "bash",
+          lesson,
+          session,
+        }),
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(`The server answered ${response.status}.`);
@@ -150,9 +187,10 @@
       }
 
       const seconds = ((performance.now() - started) / 1000).toFixed(1);
-      if (!text) output.textContent = "(no output)";
+      if (!text) output.hidden = true;
       if (exitCode === 0) setCellState(cell, "pass", `Done in ${seconds}s`);
       else if (exitCode === null) setCellState(cell, "fail", "The run ended without a result.");
+      else if (cell.dataset.kind === "python") setCellState(cell, "fail", `Error after ${seconds}s`);
       else setCellState(cell, "fail", `Exit code ${exitCode} after ${seconds}s`);
     } catch (error) {
       if (controller.signal.aborted) setCellState(cell, "stopped", "Stopped");
@@ -173,13 +211,92 @@
     area.closest(".cell").querySelector(".btn-cell-reset").hidden = area.value === area.defaultValue;
   });
 
-  // Shift+Enter runs the cell, as in a notebook.
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && event.shiftKey && event.target.classList.contains("cell-code")) {
+    if (!event.target.classList.contains("cell-code")) return;
+    const area = event.target;
+    if (event.key === "Enter" && event.shiftKey) {
+      // Shift+Enter runs the cell, as in a notebook.
       event.preventDefault();
-      runCell(event.target.closest(".cell"));
+      runCell(area.closest(".cell"));
+    } else if (event.key === "Tab" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      // Tab indents instead of leaving the cell; Escape then Tab moves on.
+      event.preventDefault();
+      area.setRangeText("    ", area.selectionStart, area.selectionEnd, "end");
+      area.dispatchEvent(new Event("input", { bubbles: true }));
+    } else if (event.key === "Escape") {
+      area.blur();
     }
   });
+
+  // ---- Python kernel ------------------------------------------------------
+  const restartButton = document.getElementById("kernel-restart");
+  if (restartButton) {
+    restartButton.addEventListener("click", async () => {
+      restartButton.disabled = true;
+      try {
+        const response = await post("/api/kernel", { lesson, session });
+        if (!response.ok) throw new Error(`The server answered ${response.status}.`);
+        for (const cell of document.querySelectorAll('.cell[data-kind="python"]')) {
+          delete cell.dataset.state;
+          cell.querySelector(".cell-status").textContent = "";
+          const output = cell.querySelector(".cell-output");
+          output.textContent = "";
+          output.hidden = true;
+        }
+        restartButton.textContent = "Kernel restarted";
+      } catch (error) {
+        restartButton.textContent = "Restart failed";
+      } finally {
+        window.setTimeout(() => {
+          restartButton.textContent = "Restart kernel";
+          restartButton.disabled = false;
+        }, 1500);
+      }
+    });
+  }
+
+  // ---- API key fields -----------------------------------------------------
+  const keyForms = [...document.querySelectorAll(".key-form")];
+
+  function showKeyStatus(form, state, text) {
+    form.dataset.state = state;
+    form.querySelector(".key-status").textContent = text;
+  }
+
+  if (keyForms.length) {
+    fetch(`/api/keys?session=${encodeURIComponent(session)}`, { headers: API_HEADERS })
+      .then((response) => (response.ok ? response.json() : { keys: {} }))
+      .then(({ keys }) => {
+        for (const form of keyForms) {
+          if (keys[form.dataset.keyName]) showKeyStatus(form, "saved", "Saved for this session");
+        }
+      })
+      .catch(() => {});
+  }
+
+  for (const form of keyForms) {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = form.querySelector(".key-input");
+      showKeyStatus(form, "saving", "Saving…");
+      try {
+        const response = await post("/api/keys", {
+          session,
+          name: form.dataset.keyName,
+          value: input.value,
+        });
+        const body = await response.json().catch(() => ({}));
+        if (response.ok && body.saved) {
+          input.value = "";
+          showKeyStatus(form, "saved", "Saved for this session");
+        } else {
+          showKeyStatus(form, "error", body.message || `The server answered ${response.status}.`);
+        }
+      } catch (error) {
+        showKeyStatus(form, "error", `Could not save the key. ${error.message}`);
+      }
+    });
+  }
 
   // ---- graded checks ------------------------------------------------------
   const STORE_KEY = "claw-training:passed";
@@ -219,11 +336,7 @@
     button.disabled = true;
     showResult(section, "running", "Checking…", "");
     try {
-      const response = await fetch("/api/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Requested-With": "claw-web" },
-        body: JSON.stringify({ lesson, id: section.dataset.checkId }),
-      });
+      const response = await post("/api/check", { lesson, id: section.dataset.checkId, session });
       if (!response.ok) throw new Error(`The server answered ${response.status}.`);
       const body = await response.json();
       if (body.passed) {
@@ -247,9 +360,10 @@
   }
 
   // ---- lesson picker ------------------------------------------------------
-  document.getElementById("lesson-picker").addEventListener("change", (event) => {
-    window.location.assign(event.target.value);
-  });
+  const picker = document.getElementById("lesson-picker");
+  if (picker) {
+    picker.addEventListener("change", (event) => window.location.assign(event.target.value));
+  }
 
   // ---- buttons ------------------------------------------------------------
   document.addEventListener("click", (event) => {
@@ -280,12 +394,10 @@
         });
       }
     } else if (button.classList.contains("btn-check")) {
-      runCheck(button.closest(".check"));
+      if (button.closest(".check")) runCheck(button.closest(".check"));
     } else if (button.classList.contains("btn-hint")) {
       const hint = button.closest(".check").querySelector(".check-hint");
       hint.hidden = !hint.hidden;
     }
   });
-
-  connect();
 })();

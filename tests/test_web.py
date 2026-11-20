@@ -13,7 +13,7 @@ import tornado.testing
 import tornado.websocket
 
 from web.lessons import LessonError, load_lessons, parse_lesson, slug_for
-from web.server import TOKEN_COOKIE, Config, make_app, redact
+from web.server import TOKEN_COOKIE, Config, make_app, redact, shutdown_app
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FAKE_KEY = "nvapi-" + "a1B2c3D4e5F6g7H8"
@@ -108,8 +108,8 @@ def test_lesson_html_escapes_raw_markup():
 
 
 def test_shipped_lessons_load_without_key_shaped_values():
-    lessons = load_lessons(REPO_ROOT / "web" / "lessons")
-    assert lessons, "web/lessons has no lessons"
+    lessons = load_lessons(REPO_ROOT / "web" / "courses" / "02_claw")
+    assert lessons, "the Claw course has no lessons"
     assert slug_for(Path("01_nemoclaw_openclaw.md")) == "nemoclaw-openclaw"
     for lesson in lessons:
         assert not re.search(r"nvapi-[A-Za-z0-9_-]{8,}", lesson.html)
@@ -130,7 +130,7 @@ class _SiteCase(tornado.testing.AsyncHTTPTestCase):
         return app
 
     def tearDown(self):
-        self.io_loop.run_sync(self.term_manager.kill_all)
+        self.io_loop.run_sync(lambda: shutdown_app(self._app, self.term_manager))
         super().tearDown()
 
     def post_check(self, check_id, *, lesson="sample", headers=None):

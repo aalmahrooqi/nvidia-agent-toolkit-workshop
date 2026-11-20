@@ -1,0 +1,4 @@
+title: "Agents from Scratch"
+summary: "Start with one model call and add one piece at a time until you have built a working agent."
+# Every step is a Python cell, so these lessons read like a notebook with no side shell.
+shell: false
