@@ -428,8 +428,10 @@ class RunHandler(_ApiHandler):
     behind the same token gate and same-origin checks.
 
     A ``bash`` cell runs as its own ``bash -c`` in the lab folder with the lab
-    environment and no stdin. A ``python`` cell runs in the lesson's kernel, so
-    it shares variables with the cells before it.
+    environment and no stdin. A lesson that lists ``keys`` in its front matter
+    also gets those keys there, once this browser session has saved them. A
+    ``python`` cell runs in the lesson's kernel, so it shares variables with
+    the cells before it.
     """
 
     process: asyncio.subprocess.Process | None = None
@@ -461,9 +463,18 @@ class RunHandler(_ApiHandler):
         if kind == "python":
             await self._run_python(code, lesson, self.session(body.get("session")))
         else:
-            await self._run_bash(code)
+            await self._run_bash(code, self._lesson_keys(body))
 
-    async def _run_bash(self, code: str) -> None:
+    def _lesson_keys(self, body: dict) -> dict[str, str]:
+        """The saved keys a bash cell on this lesson is allowed to see."""
+        slug = body.get("lesson")
+        lesson = self.settings["config"].lesson(slug) if isinstance(slug, str) else None
+        if lesson is None or not lesson.keys:
+            return {}
+        saved = self.settings["session_keys"].get(self.session(body.get("session")), {})
+        return {name: saved[name] for name in lesson.keys if name in saved}
+
+    async def _run_bash(self, code: str, keys: dict[str, str]) -> None:
         config: Config = self.settings["config"]
         active: set = self.settings["active_runs"]
         self.process = await asyncio.create_subprocess_exec(
@@ -474,7 +485,7 @@ class RunHandler(_ApiHandler):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=config.lab_cwd,
-            env=config.process_env(),
+            env={**config.process_env(), **keys},
             start_new_session=True,
         )
         active.add(self.process)
@@ -555,7 +566,8 @@ class KeysHandler(_ApiHandler):
 
     A key is never written to disk, logged, or sent back. It is handed to that
     session's Python kernels as an environment variable, because the learner's
-    own code is what calls the model.
+    own code is what calls the model, and to bash cells only on lessons that
+    ask for it by name.
     """
 
     def get(self) -> None:

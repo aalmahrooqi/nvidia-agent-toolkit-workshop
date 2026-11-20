@@ -19,7 +19,7 @@ By the end of this lesson, you will be able to:
 Complete [NemoClaw with OpenClaw](/learn/nemoclaw-openclaw) first. This lesson changes
 policy and deploys a skill, so confirm that `$CLAW_SANDBOX` names the exact sandbox you
 mean to change before you authorize anything. The checked-in SOUL and skill live under
-`$CLAW_COURSE_DIR/tracks/04-integrations`; the shell starts in the lab folder, which is
+`$CLAW_COURSE_DIR/tracks/04-integrations`; cells run in the lab folder, which is
 where your exercise file goes.
 
 ```bash

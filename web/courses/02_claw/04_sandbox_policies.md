@@ -18,7 +18,7 @@ By the end of this lesson, you will be able to:
 
 ## Before you start
 
-Complete [What Is OpenShell?](/learn/what-is-openshell) first. Policy files you write here land in the lab folder that cells and the shell run in. Every command block is a cell: press **Run** and its output appears underneath. You can edit a cell before running it. `$CLAW_SANDBOX` holds the name of the course sandbox. The shell on the right is for interactive steps and your own commands.
+Complete [What Is OpenShell?](/learn/what-is-openshell) first. Policy files you write here land in the lab folder that cells run in. Every command block is a cell: press **Run** and its output appears underneath. You can edit a cell before running it. `$CLAW_SANDBOX` holds the name of the course sandbox.
 
 
 ---

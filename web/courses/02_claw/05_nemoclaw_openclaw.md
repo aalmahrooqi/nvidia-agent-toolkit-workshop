@@ -5,8 +5,8 @@ minutes: 45
 ---
 
 NemoClaw creates the managed sandbox. OpenShell enforces the policy. OpenClaw runs inside
-that boundary. In this lesson you inspect all three, then talk to the agent
-yourself in the shell on the right.
+that boundary. In this lesson you inspect all three, then send the agent a message
+yourself.
 
 Every command block is a cell: press **Run** and its output appears underneath. You can
 edit a cell before running it. `$CLAW_SANDBOX` already holds the name of the course sandbox.
@@ -179,24 +179,24 @@ success: Inference works through the protected route and the sandbox never holds
 
 ## 9. Talk to the agent
 
-A cell cannot run an interactive program, but the shell on the right can. Connect to the
-sandbox:
+Send the agent one message and read its reply. `openclaw agent` runs a single turn and
+exits, so it works in a cell. `main` is the agent every NemoClaw sandbox starts with.
 
-```terminal
-nemoclaw "$CLAW_SANDBOX" connect
+```bash
+openshell sandbox exec -n "$CLAW_SANDBOX" --no-tty -- \
+  openclaw agent --agent main \
+  --message "Explain in one sentence where your provider credential is stored."
 ```
 
-Your prompt is now inside the sandbox. Start the OpenClaw terminal UI:
+Compare the answer with what you just measured. The model's explanation is not the proof;
+the placeholder and the successful routed request are.
 
-```terminal
-openclaw tui
-```
+Edit the message and run the cell again to ask something else. Each run continues the same
+conversation with the `main` agent.
 
-Ask it: *Explain in one sentence where your provider credential is stored.* Then compare
-the answer with what you just measured. The model's explanation is not the proof; the
-placeholder and the successful routed request are.
-
-Leave the UI, then type `exit` to return to the host shell.
+> For a back-and-forth chat, NemoClaw also has an interactive terminal UI. From a terminal
+> on this host, `nemoclaw "$CLAW_SANDBOX" connect` puts you inside the sandbox and
+> `openclaw tui` starts it. It needs a real terminal, so it is not part of this page.
 
 ## What you accomplished
 
@@ -205,7 +205,7 @@ Leave the UI, then type `exit` to return to the host shell.
 - Inspected the workspace, skills, and session surfaces without changing the environment
 - Read the live OpenShell policy on the managed sandbox
 - Proved inference works through the protected route while the sandbox holds only a placeholder
-- Chatted with the agent from the same page
+- Sent the agent a message from the same page
 
 **Sources:**
 [NemoClaw commands](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/reference/commands) ·

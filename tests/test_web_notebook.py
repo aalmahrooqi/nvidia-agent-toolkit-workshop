@@ -4,6 +4,8 @@ import json
 import os
 import re
 
+import pytest
+
 from tests.test_web import FAKE_KEY, REPO_ROOT, _SiteCase
 from web.lessons import Course, LessonError, load_courses, parse_lesson
 from web.server import Config
@@ -54,8 +56,9 @@ not_a_cell = True
 def _notebook_config(**overrides) -> Config:
     notebook = parse_lesson(NOTEBOOK_TEXT, "notebook")
     plain = parse_lesson(PLAIN_TEXT, "plain")
+    keyed = parse_lesson("---\ntitle: Keyed\nkeys: [NVIDIA_API_KEY]\n---\nbody\n", "keyed")
     settings = {
-        "lessons": (notebook, plain),
+        "lessons": (notebook, plain, keyed),
         "lab_env": {"NVIDIA_API_KEY": None, "TAVILY_API_KEY": None},
         "lab_cwd": REPO_ROOT,
         "shell_command": ("bash", "--noprofile", "--norc"),
@@ -208,6 +211,29 @@ def test_courses_load_in_order_and_reject_duplicate_slugs(tmp_path):
         raise AssertionError("duplicate lesson slugs were accepted")
 
 
+def test_front_matter_keys_must_be_known_key_names():
+    lesson = parse_lesson("---\ntitle: T\nkeys: [NVIDIA_API_KEY]\n---\nbody\n", "keyed")
+    assert lesson.keys == ("NVIDIA_API_KEY",)
+    assert parse_lesson("---\ntitle: T\n---\nbody\n", "plain").keys == ()
+    for bad in ("keys: NVIDIA_API_KEY", "keys: [AWS_SECRET_ACCESS_KEY]"):
+        with pytest.raises(LessonError, match="front matter 'keys'"):
+            parse_lesson(f"---\ntitle: T\n{bad}\n---\nbody\n", "bad")
+
+
+def test_a_course_without_a_shell_may_not_have_terminal_blocks(tmp_path):
+    folder = tmp_path / "01_only"
+    folder.mkdir()
+    lesson = "---\ntitle: Intro\n---\n```terminal\nopenclaw tui\n```\n"
+    (folder / "01_intro.md").write_text(lesson, encoding="utf-8")
+
+    (folder / "course.yaml").write_text("title: Only\n", encoding="utf-8")
+    assert load_courses(tmp_path)[0].lessons[0].terminal_blocks == 1
+
+    (folder / "course.yaml").write_text("title: Only\nshell: false\n", encoding="utf-8")
+    with pytest.raises(LessonError, match="need the live shell: intro"):
+        load_courses(tmp_path)
+
+
 # ---- server ------------------------------------------------------------------
 
 
@@ -325,6 +351,24 @@ class TestKeys(_NotebookCase):
         _, output, _ = self.run_python("import os\nprint(os.environ['NVIDIA_API_KEY'])")
         assert output == "nvapi-[redacted]\n"
 
+    def run_bash(self, code, *, lesson, session=SESSION):
+        response = self.call(
+            "/api/run", {"code": code, "kind": "bash", "lesson": lesson, "session": session}
+        )
+        events = [json.loads(line) for line in response.body.decode().splitlines() if line]
+        return "".join(event.get("output", "") for event in events)
+
+    def test_shell_cells_get_a_saved_key_only_on_a_lesson_that_asks_for_it(self):
+        length = 'echo "len=${#NVIDIA_API_KEY}"'
+        assert self.run_bash(length, lesson="keyed") == "len=0\n"  # nothing saved yet
+        self.save(FAKE_KEY)
+        assert self.run_bash(length, lesson="keyed") == f"len={len(FAKE_KEY)}\n"
+        # Another lesson's cells, and another browser session, still get nothing.
+        assert self.run_bash(length, lesson="notebook") == "len=0\n"
+        assert self.run_bash(length, lesson="keyed", session=OTHER_SESSION) == "len=0\n"
+        # A cell that prints the key shows it redacted.
+        assert self.run_bash('echo "$NVIDIA_API_KEY"', lesson="keyed") == "nvapi-[redacted]\n"
+
     def test_malformed_and_unknown_keys_are_rejected(self):
         rejected = self.save("not-a-key")
         assert rejected.code == 422 and json.loads(rejected.body)["saved"] is False
@@ -396,7 +440,8 @@ class TestCoursePages(_SiteCase):
         agents = self.fetch("/learn/memory").body.decode()
         assert "/learn/agent-loop" in agents and "/learn/sandbox-policies" not in agents
         claw = self.fetch("/learn/sandbox-policies").body.decode()
-        assert 'id="terminal"' in claw and 'id="kernel-restart"' not in claw
+        assert 'class="no-shell"' in claw and 'id="terminal"' not in claw
+        assert 'id="kernel-restart"' not in claw and 'data-kind="bash"' in claw
         assert "/learn/nasa-apod" in claw and "/learn/agent-loop" not in claw
 
     def test_every_lesson_page_renders(self):

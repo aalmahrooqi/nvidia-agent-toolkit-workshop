@@ -182,7 +182,11 @@ def course_is_set_up() -> bool:
 
 
 def cmd_setup(args: argparse.Namespace) -> int:
-    """Ask for the NVIDIA API key and run setup.sh with it, detached from this shell."""
+    """Run setup.sh with the learner's NVIDIA API key, detached from the cell or shell.
+
+    The key comes from the environment when the Setup lesson's cell supplies it
+    (the learner saved it in the page), or from a hidden prompt in a terminal.
+    """
     log, pid_file = _setup_paths()
     course_dir = Path(os.environ.get("CLAW_COURSE_DIR") or REPO_ROOT)
 
@@ -195,20 +199,22 @@ def cmd_setup(args: argparse.Namespace) -> int:
         print("Already set up: the course sandbox exists. Run `claw setup --force` to redo it.")
         return 0
 
-    if not sys.stdin.isatty():
-        print(
-            "claw setup needs a terminal so it can read the key without echoing it. "
-            "Run it in the shell on the right, not in a cell."
-        )
-        return 1
-    key = getpass.getpass("Paste your NVIDIA API key (input stays hidden), then press Enter: ")
-    key = key.strip()
+    key = os.environ.get("NVIDIA_API_KEY", "").strip()
+    if not key:
+        if not sys.stdin.isatty():
+            print(
+                "No NVIDIA API key yet. Save your key in the box above this cell, "
+                "then run the cell again."
+            )
+            return 1
+        key = getpass.getpass("Paste your NVIDIA API key (input stays hidden), then press Enter: ")
+        key = key.strip()
     if not API_KEY_RE.fullmatch(key):
-        print("That is not an nvapi- key. Nothing was started; run `claw setup` to try again.")
+        print("That is not an nvapi- key. Nothing was started; save the key again and re-run.")
         return 1
 
     # The key goes only into the environment of this one setup.sh run. It is not
-    # exported to the shell, written to disk, or passed on a command line.
+    # written to disk or passed on a command line.
     # start_new_session detaches the run, so leaving this page does not stop it.
     with log.open("wb") as output:
         process = subprocess.Popen(
@@ -222,7 +228,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         )
     del key
     pid_file.write_text(str(process.pid), encoding="utf-8")
-    print("Setup started. Leaving this page will not stop it; run `claw setup` to watch again.\n")
+    print("Setup started. Leaving this page will not stop it; run this again to watch.\n")
     try:
         return _follow_setup(log, process.pid, process)
     finally:

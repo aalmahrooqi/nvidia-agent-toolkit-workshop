@@ -2,8 +2,10 @@
 
 A course is a directory holding a ``course.yaml`` and its lessons. A lesson is
 a Markdown file with a YAML front-matter block (``title``, ``subtitle``,
-``minutes``, and optionally ``kernel: python``). Some fenced blocks get special
-treatment:
+``minutes``, and optionally ``kernel: python`` and ``keys``). ``keys`` lists the
+API keys the lesson's bash cells receive as environment variables once the
+learner has saved them in the page; cells in other lessons never see them.
+Some fenced blocks get special treatment:
 
 * ``bash`` / ``sh`` / ``shell`` fences render as cells: editable code with a Run
   button, whose output appears underneath, like a notebook cell. Each one runs
@@ -13,7 +15,8 @@ treatment:
   available in the next. Without a kernel, ``python`` is plain code.
 * ``terminal`` fences are for interactive commands that need a real terminal
   (a hidden prompt, a TUI). They get a "Run in shell" button that types the
-  command into the page's live shell instead.
+  command into the page's live shell instead. A course with ``shell: false``
+  has no live shell, so its lessons may not use them.
 * ``check`` fences define a graded check: YAML with ``task`` and either
   ``command`` (bash, passes on exit code 0) or ``python`` (run in the lesson's
   kernel, passes when it does not raise). Only the task and hint reach the
@@ -79,6 +82,10 @@ class Lesson:
     kernel: str = ""
     course: str = ""
     shell: bool = True
+    # API keys this lesson's bash cells are given, once saved in the page.
+    keys: tuple[str, ...] = ()
+    # How many blocks need the live shell.
+    terminal_blocks: int = 0
 
     def check(self, check_id: str) -> Check | None:
         return next((check for check in self.checks if check.id == check_id), None)
@@ -260,6 +267,7 @@ class _LessonRenderer(mistune.HTMLRenderer):
         super().__init__(escape=True)
         self.kernel = kernel
         self.checks: list[Check] = []
+        self.terminal_blocks = 0
 
     def link(self, text: str, url: str, title: str | None = None) -> str:
         """Links to other sites open in a new tab, so the lesson and its output stay open."""
@@ -288,6 +296,7 @@ class _LessonRenderer(mistune.HTMLRenderer):
         if language == "python" and self.kernel == "python":
             return _cell(body, "python")
         if language in TERMINAL_LANGUAGES:
+            self.terminal_blocks += 1
             run_in_shell = '<button type="button" class="btn btn-run">Run in shell</button>'
             return (
                 '<div class="cmd codeblock">'
@@ -378,6 +387,9 @@ def parse_lesson(text: str, slug: str) -> Lesson:
     kernel = str(meta.get("kernel") or "")
     if kernel not in ("", "python"):
         raise LessonError("front matter 'kernel' must be 'python' when set")
+    keys = meta.get("keys") or []
+    if not isinstance(keys, list) or any(name not in KEY_NAMES for name in keys):
+        raise LessonError(f"front matter 'keys' must list any of: {', '.join(sorted(KEY_NAMES))}")
 
     renderer = _LessonRenderer(kernel=kernel)
     render = mistune.create_markdown(renderer=renderer, plugins=["table", "strikethrough"])
@@ -391,6 +403,8 @@ def parse_lesson(text: str, slug: str) -> Lesson:
         html=body,
         checks=tuple(renderer.checks),
         kernel=kernel,
+        keys=tuple(keys),
+        terminal_blocks=renderer.terminal_blocks,
     )
 
 
@@ -428,6 +442,12 @@ def load_courses(directory: Path) -> list[Course]:
             raise LessonError(f"{path.name}/{exc}") from exc
         if not lessons:
             raise LessonError(f"{path.name} has no lessons")
+        stranded = [lesson.slug for lesson in lessons if lesson.terminal_blocks and not shell]
+        if stranded:
+            raise LessonError(
+                f"{path.name} sets 'shell: false', but these lessons have 'terminal' blocks "
+                f"that need the live shell: {', '.join(stranded)}"
+            )
         courses.append(
             Course(
                 slug=slug,

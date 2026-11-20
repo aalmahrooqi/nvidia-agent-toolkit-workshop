@@ -160,8 +160,13 @@ def test_the_site_serves_agents_before_claw_with_unique_slugs():
     courses = load_courses(REPO_ROOT / "web" / "courses")
     assert [course.slug for course in courses] == ["agents", "claw"]
     agents, claw = courses
-    assert not any(lesson.shell for lesson in agents.lessons)
-    assert all(lesson.shell for lesson in claw.lessons)
+    # Both courses are cells only: no side shell, and no step that would need one.
+    for course in courses:
+        assert not any(lesson.shell or lesson.terminal_blocks for lesson in course.lessons)
+    # Only the setup lesson's cells are handed the learner's key.
+    assert {lesson.slug: lesson.keys for lesson in claw.lessons if lesson.keys} == {
+        "setup": ("NVIDIA_API_KEY",)
+    }
     slugs = [lesson.slug for course in courses for lesson in course.lessons]
     assert len(slugs) == len(set(slugs))
 

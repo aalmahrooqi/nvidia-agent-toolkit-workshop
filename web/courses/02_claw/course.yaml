@@ -1,2 +1,4 @@
 title: "Claw Training: NemoClaw, OpenShell, and OpenClaw"
 summary: "Install the stack, write sandbox policy, and run a policy-constrained agent that calls real APIs."
+# Every step is a cell that runs on this host, so these lessons have no side shell.
+shell: false

@@ -2,6 +2,8 @@
 title: "Set Up Your Environment"
 subtitle: "Enter your NVIDIA API key once and let the course install itself"
 minutes: 10
+# The setup cell on this page is the one place a cell is handed the key.
+keys: [NVIDIA_API_KEY]
 ---
 
 Everything in this course runs against a NemoClaw sandbox on this host. This page creates it.
@@ -14,37 +16,48 @@ You need one thing: an NVIDIA API key, which starts with `nvapi-`.
 3. Checks the installed versions against the course's pins.
 4. Sends one model request through the sandbox to prove the whole path works.
 
-## Run it
+## 1. Save your key
 
-Start setup with the button below. It runs in the shell on the right, because it has to ask
-for your key: paste it there and press Enter. Nothing appears as you paste, which is
-deliberate.
+Paste your key and press **Save**. If you already saved it in *Agents from Scratch*, it is
+still here and you can skip this step.
 
-```terminal
+```key
+name: NVIDIA_API_KEY
+label: NVIDIA API key
+placeholder: nvapi-...
+hint: Get one free at build.nvidia.com. It is kept in memory for this browser session only and never written to disk.
+```
+
+## 2. Run setup
+
+Press **Run**. The output appears underneath as setup works through its steps.
+
+```bash
 claw setup
 ```
 
 Setup takes several minutes, mostly downloading sandbox images. It keeps running if you leave
-this page, so you can start [the first lesson](/learn/concepts) while you wait. Run `claw setup`
+this page, so you can start [the first lesson](/learn/concepts) while you wait. Run the cell
 again at any time to see its progress.
 
-If the course was launched with the key already supplied, setup has run and the command says
-so without asking for anything.
+If the course was launched with the key already supplied, setup has run and the cell says so
+without needing a key.
 
 ## Where your key goes
 
 | Place | Holds your key? |
 |---|---|
+| This page, in memory, for your browser session | Yes |
 | The setup run you just started | Yes, for as long as it runs |
 | OpenShell's gateway on this host | Yes. It injects the key into model requests |
-| This shell, and every other lesson's shell | No |
+| Cells in every other lesson of this course | No |
 | The sandbox the agent runs in | No. It sees a placeholder |
 | Any file in the course folder | No |
 
 That last-but-one row is the idea the whole course builds on. You will prove it yourself in
 [Sandbox Policies](/learn/sandbox-policies).
 
-## Confirm it worked
+## 3. Confirm it worked
 
 When the output ends with `Setup complete.`, check the result:
 
@@ -60,16 +73,17 @@ command: |
   status=$(openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 20 -- sh -lc 'curl -sS -o /dev/null -w "%{http_code}" https://inference.local/v1/models -H "Authorization: Bearer openshell:resolve:env:NVIDIA_API_KEY"')
   echo "HTTP_STATUS=$status"
   [ "$status" = 200 ]
-hint: "Setup may still be running; `claw setup` shows its progress. If it failed, read the last lines of its output, then run `claw setup --force`."
+hint: "Setup may still be running; run the `claw setup` cell again to see its progress. If it failed, read the last lines of its output, then change the cell to `claw setup --force` and run it."
 success: "The environment is ready. Every lab in the course runs against this sandbox."
 ```
 
 ## If something goes wrong
 
-- **"That is not an nvapi- key":** the paste was incomplete or included extra characters. Run
-  `claw setup` again.
+- **"No NVIDIA API key yet":** save your key in step 1, then run the setup cell again.
+- **"That is not an nvapi- key":** the paste was incomplete or included extra characters. Save
+  the key again, then run the setup cell again.
 - **Setup stops with an error:** the last lines name the step that failed. Fix the cause, then
-  run `claw setup --force`.
+  change the cell to `claw setup --force` and run it.
 - **You want to see the full log:** it is at `~/claw-setup.log`. It never contains your key.
 
 ## Next

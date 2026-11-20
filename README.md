@@ -98,21 +98,24 @@ uv run python -m web.server --dev
 | Course | What it covers | Cells |
 |---|---|---|
 | 1. Agents from Scratch | Build an agent in plain Python, one piece at a time: a bare model call, memory, tools, web search, the agent loop, guardrails, and why an agent needs a sandbox | Python, sharing one kernel per lesson |
-| 2. Claw Training | Install NemoClaw, write sandbox policy, and run a policy-constrained agent | Shell, plus a live shell for interactive steps |
+| 2. Claw Training | Install NemoClaw, write sandbox policy, and run a policy-constrained agent | Shell commands, each run as its own cell |
 
 - **Lessons** are Markdown files under [`web/courses/`](web/courses/), one folder per course.
   A `bash` block is a shell cell. In a lesson with `kernel: python`, a `python` block is a
-  Python cell, and all of a lesson's Python cells share variables. A `terminal` block types an
-  interactive command into the live shell. A `check` block is a graded check whose grading
-  code stays on the server. A `key` block is a field for an API key. A `solution` block
-  renders collapsed.
+  Python cell, and all of a lesson's Python cells share variables. A `check` block is a
+  graded check whose grading code stays on the server. A `key` block is a field for an API
+  key. A `solution` block renders collapsed. Both courses set `shell: false` in their
+  `course.yaml`, so every step is a cell; without it a course gets a live terminal beside
+  the lesson, and `terminal` blocks type interactive commands into it.
 - **API keys** entered in the page are held in server memory for that browser session only.
-  They are never written to disk or sent back, and they reach only that session's Python
-  cells. Course 1 needs an NVIDIA API key; a Tavily key is optional.
-- **Course 2 setup happens in the page.** Its first lesson asks for the NVIDIA API key in the
-  shell (hidden input) and runs `setup.sh`, so running `./setup.sh` beforehand is optional.
-- **The shell** in Course 2 starts in `lab/`, a scratch folder for the files learners write.
-  **`claw`** ([`web/lab.py`](web/lab.py)) is a small helper on its PATH.
+  They are never written to disk or sent back. They reach that session's Python cells, and
+  shell cells only on a lesson that lists them under `keys` in its front matter. Course 1
+  needs an NVIDIA API key; a Tavily key is optional.
+- **Course 2 setup happens in the page.** Its first lesson takes the NVIDIA API key in a key
+  field and runs `setup.sh` from a cell, so running `./setup.sh` beforehand is optional. That
+  lesson is the only one whose shell cells receive the key.
+- **Shell cells** in Course 2 run in `lab/`, a scratch folder for the files learners write.
+  **`claw`** ([`web/lab.py`](web/lab.py)) is a small helper on their PATH.
 - **The server** is one Python process with no build step. It runs code on the host, so it
   binds to loopback and refuses any other address unless `CLAW_WEB_TOKEN` is set or the
   address is a private one behind a login (`--behind-login`, which the Brev Launchable uses).

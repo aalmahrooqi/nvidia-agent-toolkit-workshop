@@ -328,8 +328,31 @@ def test_setup_reports_a_failed_run(setup_env, monkeypatch, capsys):
     assert "boom" in capsys.readouterr().out
 
 
-def test_setup_needs_a_terminal(setup_env, monkeypatch, capsys):
+def test_setup_in_a_cell_asks_for_the_key_to_be_saved_first(setup_env, monkeypatch, capsys):
     monkeypatch.setattr(lab.sys, "stdin", _Pipe())
+    monkeypatch.setattr(lab.subprocess, "Popen", lambda *a, **k: pytest.fail("setup.sh started"))
 
     assert lab.main(["setup"]) == 1
-    assert "needs a terminal" in capsys.readouterr().out
+    assert "Save your key in the box above" in capsys.readouterr().out
+
+
+def test_setup_in_a_cell_uses_the_key_the_page_supplied(setup_env, monkeypatch, capsys):
+    monkeypatch.setattr(lab.sys, "stdin", _Pipe())
+    monkeypatch.setattr(lab.getpass, "getpass", lambda prompt: pytest.fail("asked for a key"))
+    monkeypatch.setenv("NVIDIA_API_KEY", FAKE_KEY)
+
+    assert lab.main(["setup"]) == 0
+
+    output = capsys.readouterr().out
+    assert f"KEY_LENGTH={len(FAKE_KEY)}" in output and "Setup complete." in output
+    assert FAKE_KEY not in output
+    assert FAKE_KEY not in (setup_env / "claw-setup.log").read_text(encoding="utf-8")
+
+
+def test_setup_in_a_cell_rejects_a_malformed_key(setup_env, monkeypatch, capsys):
+    monkeypatch.setattr(lab.sys, "stdin", _Pipe())
+    monkeypatch.setattr(lab.subprocess, "Popen", lambda *a, **k: pytest.fail("setup.sh started"))
+    monkeypatch.setenv("NVIDIA_API_KEY", "not-a-key")
+
+    assert lab.main(["setup"]) == 1
+    assert "not an nvapi- key" in capsys.readouterr().out

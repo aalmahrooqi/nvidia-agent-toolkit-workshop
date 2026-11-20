@@ -17,7 +17,7 @@ By the end of this lesson, you will be able to:
 
 ## Before you start
 
-Complete [Set Up Your Environment](/learn/setup) first; it creates the course sandbox. Every command block is a cell: press **Run** and its output appears underneath. You can edit a cell before running it. `$CLAW_SANDBOX` holds the name of the course sandbox. The shell on the right is for interactive steps and your own commands.
+Complete [Set Up Your Environment](/learn/setup) first; it creates the course sandbox. Every command block is a cell: press **Run** and its output appears underneath. You can edit a cell before running it. `$CLAW_SANDBOX` holds the name of the course sandbox.
 
 
 ---
@@ -108,7 +108,7 @@ See what's currently running:
 openshell sandbox list
 ```
 
-The lab shell already holds the course sandbox's name:
+Every cell already holds the course sandbox's name:
 
 ```bash
 echo "$CLAW_SANDBOX"
