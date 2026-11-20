@@ -8,6 +8,7 @@ Everything is one process on the course host. The page talks to it three ways:
 
 * ``GET /learn/<slug>``  the lesson, rendered from ``web/lessons/*.md``
 * ``WS  /ws/term``       a terminal in the page, bridged to a real shell
+* ``POST /api/run``      run one cell and stream its output back
 * ``POST /api/check``    run one lesson check by id and report pass or fail
 
 The shell is a full shell on the host, so access control is the deployment's
@@ -17,6 +18,7 @@ unless a token is configured. On Brev, put a Secure Link in front of it.
 
 import argparse
 import asyncio
+import codecs
 import hmac
 import json
 import os
@@ -27,6 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import tornado.iostream
 import tornado.web
 from terminado import TermSocket, UniqueTermManager
 
@@ -38,6 +41,7 @@ TOKEN_COOKIE = "claw_web_token"
 REQUEST_MARKER = "claw-web"
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _SECRET_RE = re.compile(r"nvapi-[A-Za-z0-9_-]+")
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 
 CONTENT_SECURITY_POLICY = "; ".join(
     [
@@ -59,6 +63,9 @@ class Config:
     lab_cwd: Path = REPO_ROOT
     token: str = ""
     check_timeout: float = 25.0
+    run_timeout: float = 1800.0
+    max_runs: int = 8
+    max_code_bytes: int = 65536
     max_terminals: int = 8
     shell_command: tuple[str, ...] = field(
         default=("bash", "--rcfile", str(WEB_ROOT / "labrc"), "-i")
@@ -81,6 +88,12 @@ class Config:
 def redact(text: str) -> str:
     """Never echo an API key back to the page, whatever a command printed."""
     return _SECRET_RE.sub("nvapi-[redacted]", text)
+
+
+def clean_output(text: str) -> str:
+    """Make command output safe to show under a cell: no escape codes, no keys."""
+    text = _ANSI_RE.sub("", text).replace("\r\n", "\n").replace("\r", "\n")
+    return redact(text)
 
 
 async def run_check(command: str, *, env: dict[str, str], cwd: Path, timeout: float):
@@ -168,8 +181,8 @@ class LessonHandler(_PageHandler):
         )
 
 
-class CheckHandler(_PageHandler):
-    """Run one check by id. The command comes from the lesson, never the client."""
+class _ApiHandler(_PageHandler):
+    """Base for POST endpoints that run something on the host."""
 
     def _same_origin(self) -> bool:
         # A cross-site page cannot set this header without a CORS preflight,
@@ -178,6 +191,10 @@ class CheckHandler(_PageHandler):
             return False
         origin = self.request.headers.get("Origin")
         return not origin or urlsplit(origin).netloc == self.request.host
+
+
+class CheckHandler(_ApiHandler):
+    """Run one check by id. The command comes from the lesson, never the client."""
 
     async def post(self) -> None:
         if not self._same_origin():
@@ -205,6 +222,89 @@ class CheckHandler(_PageHandler):
         self.write({"passed": passed, "message": message, "output": redact(output)[-1500:]})
 
 
+class RunHandler(_ApiHandler):
+    """Run one cell and stream its output as newline-delimited JSON.
+
+    Cells are editable, so the code comes from the page. That adds nothing to
+    what the terminal WebSocket already lets the same visitor do, and it sits
+    behind the same token gate and same-origin checks. Each cell runs as its own
+    ``bash -c`` in the lab folder with the lab environment and no stdin, so
+    interactive commands belong in a ``terminal`` block instead.
+    """
+
+    process: asyncio.subprocess.Process | None = None
+
+    async def post(self) -> None:
+        if not self._same_origin():
+            raise tornado.web.HTTPError(403)
+        config: Config = self.settings["config"]
+        try:
+            body = json.loads(self.request.body or b"{}")
+        except json.JSONDecodeError as exc:
+            raise tornado.web.HTTPError(400, "Body must be JSON.") from exc
+        code = body.get("code") if isinstance(body, dict) else None
+        if not isinstance(code, str) or not code.strip():
+            raise tornado.web.HTTPError(400, "Nothing to run.")
+        if len(code.encode()) > config.max_code_bytes:
+            raise tornado.web.HTTPError(413, "The cell is too large.")
+        active: set = self.settings["active_runs"]
+        if len(active) >= config.max_runs:
+            raise tornado.web.HTTPError(429, "Too many cells are running. Stop one first.")
+
+        self.set_header("Content-Type", "application/x-ndjson")
+        self.set_header("Cache-Control", "no-store")
+        self.set_header("X-Accel-Buffering", "no")  # ask proxies not to buffer the stream
+
+        self.process = await asyncio.create_subprocess_exec(
+            "bash",
+            "-c",
+            code,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=config.lab_cwd,
+            env=config.process_env(),
+            start_new_session=True,
+        )
+        active.add(self.process)
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        try:
+            async with asyncio.timeout(config.run_timeout):
+                while chunk := await self.process.stdout.read(4096):
+                    text = clean_output(decoder.decode(chunk))
+                    if text:
+                        await self._send({"output": text})
+                exit_code = await self.process.wait()
+            await self._send({"exit": exit_code})
+        except TimeoutError:
+            self._kill()
+            await self._send(
+                {"output": f"\nStopped: the cell ran longer than {config.run_timeout:g} seconds.\n"}
+            )
+            await self._send({"exit": 124})
+        except tornado.iostream.StreamClosedError:
+            pass  # the learner pressed Stop or left the page
+        finally:
+            self._kill()
+            await self.process.wait()
+            active.discard(self.process)
+
+    async def _send(self, event: dict) -> None:
+        self.write(json.dumps(event) + "\n")
+        await self.flush()
+
+    def on_connection_close(self) -> None:
+        self._kill()
+
+    def _kill(self) -> None:
+        """End the cell's whole process group; it may have started children."""
+        if self.process is not None and self.process.returncode is None:
+            try:
+                os.killpg(self.process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
 class TerminalHandler(_AccessMixin, TermSocket):
     """Terminal WebSocket. Tornado's default origin check already limits it to this site."""
 
@@ -224,6 +324,7 @@ def make_app(config: Config) -> tuple[tornado.web.Application, UniqueTermManager
             (r"/", IndexHandler),
             (r"/learn/([a-z0-9-]+)", LessonHandler),
             (r"/api/check", CheckHandler),
+            (r"/api/run", RunHandler),
             (r"/ws/term", TerminalHandler, {"term_manager": term_manager}),
             # Diagrams referenced by lessons. Public repository content, so not token-gated.
             (r"/assets/(.*)", tornado.web.StaticFileHandler, {"path": str(REPO_ROOT / "assets")}),
@@ -231,6 +332,7 @@ def make_app(config: Config) -> tuple[tornado.web.Application, UniqueTermManager
         template_path=str(WEB_ROOT / "templates"),
         static_path=str(WEB_ROOT / "static"),
         config=config,
+        active_runs=set(),
     )
     return app, term_manager
 
@@ -290,6 +392,12 @@ async def serve(config: Config, host: str, port: int) -> None:
         await stop.wait()
     finally:
         server.stop()
+        for process in list(app.settings["active_runs"]):
+            if process.returncode is None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
         await term_manager.kill_all()
 
 

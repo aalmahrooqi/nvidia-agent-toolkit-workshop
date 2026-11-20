@@ -5,12 +5,11 @@ minutes: 45
 ---
 
 NemoClaw creates the managed sandbox. OpenShell enforces the policy. OpenClaw runs inside
-that boundary. In this lesson you inspect all three from the shell on the right, then talk
-to the agent yourself.
+that boundary. In this lesson you inspect all three, then talk to the agent
+yourself in the shell on the right.
 
-The shell is a real one on the course host. Every command block has a **Run in shell**
-button that types the command for you, and `$CLAW_SANDBOX` already holds the name of the
-course sandbox.
+Every command block is a cell: press **Run** and its output appears underneath. You can
+edit a cell before running it. `$CLAW_SANDBOX` already holds the name of the course sandbox.
 
 ## How the layers fit
 
@@ -180,16 +179,16 @@ success: Inference works through the protected route and the sandbox never holds
 
 ## 9. Talk to the agent
 
-A notebook cell cannot run an interactive program, but this shell can. Connect to the
+A cell cannot run an interactive program, but the shell on the right can. Connect to the
 sandbox:
 
-```bash
+```terminal
 nemoclaw "$CLAW_SANDBOX" connect
 ```
 
 Your prompt is now inside the sandbox. Start the OpenClaw terminal UI:
 
-```bash
+```terminal
 openclaw tui
 ```
 

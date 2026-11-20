@@ -196,7 +196,10 @@ def cmd_setup(args: argparse.Namespace) -> int:
         return 0
 
     if not sys.stdin.isatty():
-        print("claw setup needs a terminal so it can read the key without echoing it.")
+        print(
+            "claw setup needs a terminal so it can read the key without echoing it. "
+            "Run it in the shell on the right, not in a cell."
+        )
         return 1
     key = getpass.getpass("Paste your NVIDIA API key (input stays hidden), then press Enter: ")
     key = key.strip()

@@ -17,7 +17,7 @@ By the end of this lesson, you will be able to:
 
 ## Before you start
 
-Complete [Set Up Your Environment](/learn/setup) first; it creates the course sandbox. The shell on the right is a real shell on the course host. Every command block has a **Run in shell** button, and `$CLAW_SANDBOX` holds the name of the course sandbox.
+Complete [Set Up Your Environment](/learn/setup) first; it creates the course sandbox. Every command block is a cell: press **Run** and its output appears underneath. You can edit a cell before running it. `$CLAW_SANDBOX` holds the name of the course sandbox. The shell on the right is for interactive steps and your own commands.
 
 
 ---

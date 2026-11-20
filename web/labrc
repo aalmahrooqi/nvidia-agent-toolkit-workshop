@@ -16,4 +16,4 @@ if command -v openshell >/dev/null 2>&1 && command -v nemoclaw >/dev/null 2>&1; 
 else
   printf '  \e[33mnemoclaw and openshell are not installed yet.\e[0m Run: claw setup\n'
 fi
-printf '  Use "Run in shell" on any command in the lesson, or type here.\n\n'
+printf '  Lesson cells run on their own. Use this shell for interactive steps or your own commands.\n\n'

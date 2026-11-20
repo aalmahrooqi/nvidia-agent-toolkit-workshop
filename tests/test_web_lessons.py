@@ -29,7 +29,7 @@ EXPECTED_ORDER = [
     "daily-financial-briefing",
 ]
 
-_RUNNABLE_FENCE = re.compile(r"^```(?:bash|sh|shell)\n(.*?)^```", re.MULTILINE | re.DOTALL)
+_RUNNABLE_FENCE = re.compile(r"^```(?:bash|sh|shell|terminal)\n(.*?)^```", re.MULTILINE | re.DOTALL)
 _LESSON_LINK = re.compile(r"\]\(/learn/([a-z0-9-]+)\)")
 _ASSET_LINK = re.compile(r"\]\(/assets/([^)\s]+)\)")
 

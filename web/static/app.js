@@ -86,6 +86,101 @@
     term.focus();
   }
 
+  // ---- cells --------------------------------------------------------------
+  // A cell is editable code with a Run button. The server runs it and streams
+  // the output back as newline-delimited JSON: {"output": text} ... {"exit": code}.
+  const MAX_OUTPUT_CHARS = 200000;
+
+  function autosize(area) {
+    area.style.height = "auto";
+    area.style.height = `${area.scrollHeight + 2}px`;
+  }
+
+  function setCellState(cell, state, text) {
+    cell.dataset.state = state;
+    cell.querySelector(".cell-status").textContent = text;
+  }
+
+  async function runCell(cell) {
+    if (cell.controller) return;
+    const output = cell.querySelector(".cell-output");
+    const runButton = cell.querySelector(".btn-cell-run");
+    const stopButton = cell.querySelector(".btn-cell-stop");
+    const controller = new AbortController();
+    const started = performance.now();
+    let text = "";
+    let exitCode = null;
+
+    cell.controller = controller;
+    output.hidden = false;
+    output.textContent = "";
+    runButton.disabled = true;
+    stopButton.hidden = false;
+    setCellState(cell, "running", "Running…");
+
+    try {
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Requested-With": "claw-web" },
+        body: JSON.stringify({ code: cell.querySelector(".cell-code").value }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`The server answered ${response.status}.`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pending = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        pending += decoder.decode(value, { stream: true });
+        let newline;
+        while ((newline = pending.indexOf("\n")) >= 0) {
+          const line = pending.slice(0, newline);
+          pending = pending.slice(newline + 1);
+          if (!line) continue;
+          const event = JSON.parse(line);
+          if (typeof event.output === "string") {
+            text = (text + event.output).slice(-MAX_OUTPUT_CHARS);
+            output.textContent = text;
+            output.scrollTop = output.scrollHeight;
+          }
+          if (typeof event.exit === "number") exitCode = event.exit;
+        }
+      }
+
+      const seconds = ((performance.now() - started) / 1000).toFixed(1);
+      if (!text) output.textContent = "(no output)";
+      if (exitCode === 0) setCellState(cell, "pass", `Done in ${seconds}s`);
+      else if (exitCode === null) setCellState(cell, "fail", "The run ended without a result.");
+      else setCellState(cell, "fail", `Exit code ${exitCode} after ${seconds}s`);
+    } catch (error) {
+      if (controller.signal.aborted) setCellState(cell, "stopped", "Stopped");
+      else setCellState(cell, "fail", `Could not run the cell. ${error.message}`);
+    } finally {
+      cell.controller = null;
+      runButton.disabled = false;
+      stopButton.hidden = true;
+    }
+  }
+
+  for (const area of document.querySelectorAll(".cell-code")) autosize(area);
+
+  document.addEventListener("input", (event) => {
+    if (!event.target.classList.contains("cell-code")) return;
+    const area = event.target;
+    autosize(area);
+    area.closest(".cell").querySelector(".btn-cell-reset").hidden = area.value === area.defaultValue;
+  });
+
+  // Shift+Enter runs the cell, as in a notebook.
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.shiftKey && event.target.classList.contains("cell-code")) {
+      event.preventDefault();
+      runCell(event.target.closest(".cell"));
+    }
+  });
+
   // ---- graded checks ------------------------------------------------------
   const STORE_KEY = "claw-training:passed";
 
@@ -161,8 +256,21 @@
     const button = event.target.closest("button");
     if (!button) return;
 
-    if (button.classList.contains("btn-run") || button.classList.contains("btn-copy")) {
-      const code = button.closest(".cmd").querySelector("code").textContent;
+    if (button.classList.contains("btn-cell-run")) {
+      runCell(button.closest(".cell"));
+    } else if (button.classList.contains("btn-cell-stop")) {
+      const cell = button.closest(".cell");
+      if (cell.controller) cell.controller.abort();
+    } else if (button.classList.contains("btn-cell-reset")) {
+      const area = button.closest(".cell").querySelector(".cell-code");
+      area.value = area.defaultValue;
+      autosize(area);
+      button.hidden = true;
+    } else if (button.classList.contains("btn-run") || button.classList.contains("btn-copy")) {
+      const holder = button.closest(".cmd, .cell");
+      const code = holder.classList.contains("cell")
+        ? holder.querySelector(".cell-code").value
+        : holder.querySelector("code").textContent;
       if (button.classList.contains("btn-run")) {
         runInShell(code);
       } else {

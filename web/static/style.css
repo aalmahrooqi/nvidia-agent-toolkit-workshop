@@ -254,3 +254,63 @@ blockquote {
 details.solution { margin: 14px 0; }
 details.solution summary { cursor: pointer; color: var(--accent); font-size: 14px; }
 details.solution pre.code { margin-top: 8px; }
+
+/* ---- cells: editable code, Run, output underneath ---- */
+.cell {
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+.cell[data-state="running"] { border-left-color: var(--accent-strong); }
+.cell[data-state="pass"] { border-left-color: var(--pass); }
+.cell[data-state="fail"] { border-left-color: var(--fail); }
+
+.cell-code {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--fg);
+  font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: hidden;
+  resize: none;
+  tab-size: 2;
+}
+.cell-code:focus { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+
+.cell-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+}
+.btn-cell-run {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: #0d1110;
+  font-weight: 600;
+}
+.cell-status { margin-left: auto; color: var(--fg-dim); font-size: 12.5px; }
+.cell[data-state="pass"] .cell-status { color: var(--pass); }
+.cell[data-state="fail"] .cell-status { color: var(--fail); }
+
+.cell-output {
+  max-height: 22rem;
+  margin: 0;
+  padding: 10px 14px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

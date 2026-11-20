@@ -18,7 +18,7 @@ By the end of this lesson, you will be able to:
 
 ## Before you start
 
-Complete [What Is OpenShell?](/learn/what-is-openshell) first. Policy files you write here land in the lab folder the shell starts in. The shell on the right is a real shell on the course host. Every command block has a **Run in shell** button, and `$CLAW_SANDBOX` holds the name of the course sandbox.
+Complete [What Is OpenShell?](/learn/what-is-openshell) first. Policy files you write here land in the lab folder that cells and the shell run in. Every command block is a cell: press **Run** and its output appears underneath. You can edit a cell before running it. `$CLAW_SANDBOX` holds the name of the course sandbox. The shell on the right is for interactive steps and your own commands.
 
 
 ---
@@ -240,7 +240,7 @@ landlock:
 EOF
 ```
 
-Open the file in an editor (`nano fs-exercise.policy.yaml`) and replace every `FIXME` with the least-privilege value.
+Edit the cell above: replace every `FIXME` with the least-privilege value, then run it to write the file.
 
 Grade the design. The grader only reads the file; it does not create a sandbox or change any live policy. It prints `FILESYSTEM_POLICY_EXERCISE_OK` when the policy is right, and otherwise lists what to fix. It rejects broad grants, overlapping permissions, and missing Landlock compatibility.
 

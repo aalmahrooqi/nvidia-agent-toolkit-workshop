@@ -187,7 +187,7 @@ def validate_apod_payload(payload):
 EOF
 ```
 
-Open the file in an editor (`nano apod_validator.py`) and make the function return `True`
+Edit the cell above, then run it to write the file. The function must return `True`
 for the two valid records below and `False` for everything else the grader tries: a
 non-dictionary payload, a non-ISO date, a non-HTTPS URL, a missing explanation, an empty
 title, an empty or non-HTTPS HD URL, an unknown media type, and an API error document.

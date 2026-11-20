@@ -80,8 +80,8 @@ uv run jupyter lab tracks/01-concepts-architecture/01_concepts.ipynb
 ### Workshop site
 
 The whole course is also available as a web site: each lesson on the left, a live shell on the
-host beside it. Learners run commands with one click, get graded checks, and can chat with the
-agent without leaving the page.
+host beside it. Code blocks are cells, as in a notebook: learners edit them, press Run, and see
+the output underneath. They also get graded checks and can chat with the agent in the shell.
 
 ```bash
 uv run python -m web.server      # then open http://127.0.0.1:3000
@@ -91,9 +91,10 @@ uv run python -m web.server      # then open http://127.0.0.1:3000
   (hidden input) and runs `setup.sh` for you, so running `./setup.sh` beforehand is optional.
   The key goes only to that one setup run; it is not stored or exported.
 - **Lessons** are Markdown files in [`web/lessons/`](web/lessons/), converted from the
-  notebooks. A `bash` block gets a "Run in shell" button. A `check` block becomes a graded
-  check whose command runs on the server and is never sent to the page. A `solution` block
-  renders collapsed.
+  notebooks. A `bash` block becomes an editable cell with a Run button and its output
+  underneath. A `terminal` block is for interactive commands and types into the live shell.
+  A `check` block becomes a graded check whose command stays on the server. A `solution`
+  block renders collapsed.
 - **The shell** starts in `lab/`, a scratch folder for the policy files and exercises learners
   write. It has `$CLAW_SANDBOX` set and no `NVIDIA_API_KEY`.
 - **`claw`** ([`web/lab.py`](web/lab.py)) is a small helper on the shell's PATH for steps that

@@ -3,7 +3,11 @@
 A lesson is a Markdown file with a YAML front-matter block. Two kinds of fenced
 block get special treatment:
 
-* ``bash`` / ``sh`` / ``shell`` fences render with a "Run in shell" button.
+* ``bash`` / ``sh`` / ``shell`` fences render as cells: editable code with a Run
+  button, whose output appears underneath, like a notebook cell.
+* ``terminal`` fences are for interactive commands that need a real terminal
+  (a hidden prompt, a TUI). They get a "Run in shell" button that types the
+  command into the page's live shell instead.
 * ``check`` fences define a graded check. Only the task and hint reach the
   page; the grading command stays on the server and is looked up by id.
 * ``solution`` fences render collapsed, behind a "Show solution" toggle.
@@ -23,6 +27,7 @@ import mistune
 import yaml
 
 RUNNABLE_LANGUAGES = frozenset({"bash", "sh", "shell"})
+TERMINAL_LANGUAGES = frozenset({"terminal"})
 _FRONT_MATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 _ORDER_PREFIX_RE = re.compile(r"^\d+[_-]")
@@ -78,6 +83,22 @@ class _LessonRenderer(mistune.HTMLRenderer):
                 f'<pre class="code"><code>{body}</code></pre></details>\n'
             )
         if language in RUNNABLE_LANGUAGES:
+            rows = body.count("\n") + 1
+            return (
+                '<div class="cell">'
+                f'<textarea class="cell-code" rows="{rows}" spellcheck="false" '
+                f'autocapitalize="off" autocomplete="off" aria-label="Code cell">{body}</textarea>'
+                '<div class="cell-bar">'
+                '<button type="button" class="btn btn-cell-run">Run</button>'
+                '<button type="button" class="btn btn-cell-stop" hidden>Stop</button>'
+                '<button type="button" class="btn btn-cell-reset" hidden>Reset</button>'
+                '<button type="button" class="btn btn-copy">Copy</button>'
+                '<span class="cell-status" role="status"></span>'
+                "</div>"
+                '<pre class="cell-output" hidden></pre>'
+                "</div>\n"
+            )
+        if language in TERMINAL_LANGUAGES:
             return (
                 '<div class="cmd">'
                 f"<pre><code>{body}</code></pre>"

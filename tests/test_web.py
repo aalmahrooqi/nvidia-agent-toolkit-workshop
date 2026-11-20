@@ -74,7 +74,7 @@ def test_lesson_renders_run_buttons_only_on_shell_blocks():
         "A lesson for tests",
         5,
     )
-    assert lesson.html.count("btn-run") == 1
+    assert lesson.html.count("btn-cell-run") == 1
     assert "not: runnable" in lesson.html
 
 

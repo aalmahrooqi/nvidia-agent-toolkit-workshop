@@ -16,10 +16,11 @@ You need one thing: an NVIDIA API key, which starts with `nvapi-`.
 
 ## Run it
 
-Start setup in the shell on the right. It asks for your key; paste it and press Enter. Nothing
-appears as you paste, which is deliberate.
+Start setup with the button below. It runs in the shell on the right, because it has to ask
+for your key: paste it there and press Enter. Nothing appears as you paste, which is
+deliberate.
 
-```bash
+```terminal
 claw setup
 ```
 
