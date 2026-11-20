@@ -94,7 +94,7 @@ To use a tool, reply with ONLY a JSON object and nothing else:
 
 Tools:
 - get_time: the current local date and time. args: {}
-- calculate: evaluate arithmetic. args: {"expression": "2 * (3 + 4)"}
+- calculate: evaluate arithmetic; write powers with **. args: {"expression": "2 * (3 + 4)"}
 - web_search: search the web for current information. args: {"query": "..."}
 
 Use one tool at a time. After each tool result, decide whether you need another tool.

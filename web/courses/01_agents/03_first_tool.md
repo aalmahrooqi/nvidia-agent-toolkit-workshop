@@ -216,7 +216,7 @@ python: |
   assert parse_tool_request("The answer is 4.") is None
   request = parse_tool_request(reply)
   assert request and request["tool"] == "calculate", f"The model did not ask for calculate. It said: {reply!r}"
-hint: "Add `\"calculate\": calculate` to TOOLS, and a line such as `- calculate: evaluate arithmetic. args: {\"expression\": \"2 * (3 + 4)\"}` to the prompt."
+hint: "Add `\"calculate\": calculate` to TOOLS, and a line such as `- calculate: evaluate arithmetic; write powers with **. args: {\"expression\": \"2 * (3 + 4)\"}` to the prompt."
 success: "The model now chooses between two tools, and your code is ready to run either."
 ```
 
@@ -237,7 +237,7 @@ To use a tool, reply with ONLY a JSON object and nothing else:
 
 Tools:
 - get_time: the current local date and time. args: {}
-- calculate: evaluate arithmetic. args: {"expression": "2 * (3 + 4)"}
+- calculate: evaluate arithmetic; write powers with **. args: {"expression": "2 * (3 + 4)"}
 
 After you receive a tool result, answer the user in plain text."""
 
