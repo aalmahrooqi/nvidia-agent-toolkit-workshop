@@ -1,6 +1,6 @@
 ---
 title: "Sandbox Policies"
-subtitle: "Filesystem, process, network, and inference controls in one policy, proved against one sandbox"
+subtitle: "Filesystem, process, and network rules in one policy, and the credential boundary on the managed sandbox"
 minutes: 55
 ---
 
@@ -8,11 +8,11 @@ minutes: 55
 
 By the end of this lesson, you will be able to:
 
-- Explain the [default-deny](https://docs.nvidia.com/openshell/reference/default-policy) security posture
-- Write a [filesystem_policy](https://docs.nvidia.com/openshell/reference/policy-schema) section and configure Landlock compatibility
+- Explain the [default-deny](https://docs.nvidia.com/openshell/v0.0.116/reference/default-policy) security posture
+- Write a [filesystem_policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) section and configure Landlock compatibility
 - Write a process section and explain why root is prohibited
 - Write network_policies entries with L7 rules and binary restrictions
-- Explain how the privacy router and `inference.local` keep credentials out of the sandbox
+- Explain how OpenShell keeps a model credential out of the sandbox
 - Prove each policy domain with one allowed and one blocked action on a live sandbox
 - Independently design and statically validate a least-privilege filesystem policy
 
@@ -25,9 +25,9 @@ Complete [What Is OpenShell?](/learn/what-is-openshell) first. Policy files you 
 
 ## OpenShell Enforcement Context
 
-Every control in this lesson is enforced by **[OpenShell](https://docs.nvidia.com/openshell/about/overview)**, not by NemoClaw and not by the agent. OpenShell is the [sandbox](https://docs.nvidia.com/openshell/sandboxes/manage-sandboxes) runtime and policy engine: it decides which paths are writable, which user the workload runs as, which hosts, methods, paths, and binaries may send outbound traffic, and how model requests leave the sandbox.
+Every control in this lesson is enforced by **[OpenShell](https://docs.nvidia.com/openshell/v0.0.116/about/overview)**, not by NemoClaw and not by the agent. OpenShell is the [sandbox](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes) runtime and policy engine: it decides which paths are writable, which user the workload runs as, which hosts, methods, paths, and binaries may send outbound traffic, and how model requests leave the sandbox.
 
-**NemoClaw** provisions and manages the sandbox. **OpenClaw** runs inside it as the agent process. If OpenClaw or a shell command steps outside the policy, OpenShell blocks the action first.
+**NemoClaw** provisions and manages the sandbox. **OpenClaw**, the agent harness, runs inside it. If OpenClaw or a shell command steps outside the policy, OpenShell blocks the action first.
 
 A policy file covers four domains:
 
@@ -46,17 +46,18 @@ You write the policy in Parts 1–3, create one lab sandbox from it in Part 4, a
 
 ### Why Custom Policies?
 
-The managed sandbox that `setup.sh` created starts from a NemoClaw policy tier. Current onboarding offers three postures:
+The managed sandbox that setup created uses `balanced`, the default. It starts from a NemoClaw policy tier. Current onboarding offers four:
 
 | Tier | Default posture | Teaching point |
 |---|---|---|
 | `restricted` | Baseline sandbox access only | Start here when the agent needs no third-party services |
 | `balanced` | Common development, package, model, and web-search presets | Review every suggested service and its read/read-write access |
 | `open` | Broader messaging, productivity, and reference-service presets | Use only when the expanded egress is intentional |
+| `personal` | Every program in the sandbox may connect out on ports 80 and 443 | For one trusted user only. NVIDIA advises against it when the agent handles prompts or data you do not trust |
 
 A tier is an onboarding choice that expands to concrete service presets. It is not a replacement for the OpenShell policy schema. Filesystem paths, Landlock compatibility, and process controls still live in the sandbox policy itself.
 
-In this lesson you will write a small policy from scratch so you can see that lower-level boundary directly. In a NemoClaw-managed sandbox, use `nemoclaw <name> policy-add` for reviewed service presets and reserve raw policy replacement for an explicitly standalone OpenShell lab. The `policy-lab` sandbox you create in Part 4 is that standalone lab; it does not replace the managed `agent` policy.
+In this lesson you will write a small policy from scratch so you can see that lower-level boundary directly. In a NemoClaw-managed sandbox, use `nemoclaw <name> policy add` for reviewed service presets and reserve raw policy replacement for an explicitly standalone OpenShell lab. The `policy-lab` sandbox you create in Part 4 is that standalone lab; it does not replace the managed `agent` policy.
 
 ### Default-Deny Posture
 
@@ -67,7 +68,7 @@ isn't listed, it's blocked. If a binary isn't listed, it can't make network conn
 This inverts the normal trust model. On a regular Linux system, a process can read and write
 almost anywhere its user permissions allow. Default-deny means the agent starts with *zero*
 access and you grant only what it needs — the principle of least privilege. See the
-[Default Policy reference](https://docs.nvidia.com/openshell/reference/default-policy) for
+[Default Policy reference](https://docs.nvidia.com/openshell/v0.0.116/reference/default-policy) for
 what ships out of the box.
 
 `include_workdir: false` is critical. Setting it to `true` would make the `/sandbox` directory
@@ -85,7 +86,7 @@ All examples in this training use `version: 1`.
 ### Building the Filesystem Policy
 
 You'll build the `filesystem_policy` section field by field, starting from a blank section.
-See the [Policy Schema Reference](https://docs.nvidia.com/openshell/reference/policy-schema)
+See the [Policy Schema Reference](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema)
 for the full specification of every field used below.
 
 Start with the `include_workdir` setting:
@@ -125,7 +126,7 @@ What each group covers:
 - **`/usr`, `/lib`** — System libraries and binaries the agent needs to run commands
 - **`/proc`** — Process information filesystem (read-only by design)
 - **`/dev/urandom`** — Random number source for cryptographic operations
-- **`/app`** — Application directory where OpenClaw is installed
+- **`/app`** — Application directory in the sandbox image
 - **`/etc`** — System configuration files
 - **`/var/log`** — Log files for diagnostics
 - **`/sandbox`** — Sandbox root visible to the agent; this lesson keeps the baseline read-only and uses a narrower temporary path for working data
@@ -155,7 +156,7 @@ filesystem_policy:
 
 Read-write paths are where the agent can store working data. Keep this list minimal —
 every writable path is an attack surface. See
-[Security Best Practices](https://docs.nvidia.com/openshell/security/best-practices)
+[Security Best Practices](https://docs.nvidia.com/openshell/v0.0.116/security/best-practices)
 for guidance on minimizing writable paths.
 
 - **`/tmp`** — Temporary working files (cleared on sandbox restart)
@@ -175,7 +176,7 @@ landlock:
 ```
 
 [Landlock](https://docs.kernel.org/userspace-api/landlock.html) is a Linux Security Module
-that enforces [filesystem policy](https://docs.nvidia.com/openshell/reference/policy-schema)
+that enforces [filesystem policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema)
 restrictions at the kernel level. Unlike userspace permission checks (which a compromised
 process could bypass), Landlock operates in the kernel, making it tamper-proof from the
 agent's perspective. The `best_effort` compatibility mode keeps your policy working even if
@@ -220,10 +221,9 @@ smallest policy that satisfies those requirements without making `/` or all of
 Start from the policy file below. This exercise does not create a sandbox or
 change the live policy.
 
-**Reasoning note:** In the course worksheet or LMS response for
-`filesystem-policy-design`, record 1–2 sentences explaining why `/sandbox` stays
+**Before you run the check,** say in a sentence or two why `/sandbox` stays
 read-only, what evidence supports the narrower grant, and what observation would
-falsify your conclusion.
+prove you wrong.
 
 ```bash
 cat > fs-exercise.policy.yaml <<'EOF'
@@ -284,11 +284,11 @@ when the container image ships with root capabilities.
 Root inside a container is a well-known escalation vector. A root process can modify
 system files, install packages, and potentially escape the container. Dropping to the
 `sandbox` user eliminates an entire class of privilege-escalation attacks before they
-start. See [Security Best Practices](https://docs.nvidia.com/openshell/security/best-practices).
+start. See [Security Best Practices](https://docs.nvidia.com/openshell/v0.0.116/security/best-practices).
 
 **Key constraint:** Neither `run_as_user` nor `run_as_group` may be set to `root` or `0`.
 OpenShell rejects any policy requesting root process identity at creation or update time.
-There is no override.
+There is no override. A value you do set must be `sandbox` or a numeric non-root ID.
 
 ### Building the Process Section
 
@@ -300,7 +300,8 @@ process:
   run_as_group: sandbox
 ```
 
-The non-root `sandbox` identity is the recommended default.
+The non-root `sandbox` identity is the recommended choice. Set both fields explicitly: if
+you leave them out, the container image decides which user the workload runs as.
 
 #### Seccomp BPF Filtering
 
@@ -317,10 +318,10 @@ defense-in-depth model introduced in the Architecture lesson.
 
 If a policy sets `run_as_user: root`, applying it fails with a validation error. OpenShell enforces the non-root constraint at the policy-validation layer, before the sandbox is created or updated.
 
-See it live: write a [policy](https://docs.nvidia.com/openshell/reference/policy-schema) that requests `root`, then try to create a sandbox from it. NemoClaw and OpenClaw never get a chance to run because OpenShell blocks the configuration itself.
+See it live: write a [policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) that requests `root`, then try to create a sandbox from it. NemoClaw and OpenClaw never get a chance to run because OpenShell blocks the configuration itself.
 
-> ⚠️ **As of v0.1.x** -- the exact error message may differ in later versions. The
-> non-root constraint itself is a design principle, not a version-specific behavior.
+> The exact wording of the error can change between releases. The non-root rule is a design
+> principle and does not.
 
 ```bash
 cat > root-rejected.policy.yaml <<'EOF'
@@ -352,23 +353,23 @@ EOF
 Try to create a sandbox with `root` as its runtime user and treat rejection as success. **Expected result:** OpenShell refuses the policy with an error naming `run_as_user`. This matters because a valid process policy must prevent learners from silently escalating the sandbox identity.
 
 ```bash
-openshell sandbox create --name process-root-rejected --policy root-rejected.policy.yaml --no-tty -- sh -lc 'id -un'
+openshell sandbox create --name root-rejected --policy root-rejected.policy.yaml --no-tty -- sh -lc 'id -un'
 ```
 
-The command fails, and the error says `run_as_user must be 'sandbox'`.
+The command fails, and the error names `run_as_user`.
 
-Verify that rejection left no sandbox to clean up. **Expected result:** the read-only inventory does not contain `process-root-rejected`. This matters because a failed create is not owned by this lesson, so an automatic delete could remove someone else's sandbox after a name collision.
+Verify that rejection left no sandbox to clean up. **Expected result:** the read-only inventory does not contain `root-rejected`. This matters because a failed create is not owned by this lesson, so an automatic delete could remove someone else's sandbox after a name collision.
 
 ```bash
 openshell sandbox list
 ```
 
 ```check
-task: "The rejected root policy left no `process-root-rejected` sandbox behind."
+task: "The rejected root policy left no `root-rejected` sandbox behind."
 command: |
   set -o pipefail
   names=$(openshell sandbox list | awk 'NR > 1 { print $1 }') || exit 1
-  if grep -qx "process-root-rejected" <<<"$names"; then echo "process-root-rejected still exists."; exit 1; fi
+  if grep -qx "root-rejected" <<<"$names"; then echo "root-rejected still exists."; exit 1; fi
 hint: "If the sandbox exists, the policy was not rejected. Compare your file with the one above."
 success: "OpenShell refused the policy before any sandbox started."
 ```
@@ -380,7 +381,7 @@ success: "OpenShell refused the policy before any sandbox started."
 ### How Network Policies Work
 
 The OpenShell egress proxy intercepts every outbound connection from the sandbox. By default,
-**all outbound connections are blocked** — the same [default-deny](https://docs.nvidia.com/openshell/reference/default-policy)
+**all outbound connections are blocked** — the same [default-deny](https://docs.nvidia.com/openshell/v0.0.116/reference/default-policy)
 posture you applied to the filesystem in Part 1. If an
 endpoint isn't listed in your `network_policies`, the proxy drops the connection.
 
@@ -388,7 +389,7 @@ This matters because AI agents routinely make HTTP requests — fetching data, c
 posting results. Without network restrictions, a compromised agent could exfiltrate sensitive
 data to any server on the internet. The egress proxy guarantees the agent can only reach
 endpoints you've explicitly approved. For a walkthrough of setting up your first network
-rule, see the [First Network Policy tutorial](https://docs.nvidia.com/openshell/tutorials/first-network-policy).
+rule, see the [First Network Policy tutorial](https://docs.nvidia.com/openshell/v0.0.116/get-started/tutorials/first-network-policy).
 
 To allow a connection, you declare a **named policy entry** with specific endpoints. Each
 entry defines:
@@ -404,8 +405,8 @@ path). That lets the proxy distinguish a `GET /v1/models` request from a
 Network policies are the one dynamic domain: you can update them on a running sandbox
 without restarting it. You'll hot-reload a rule on a running sandbox in Part 5.
 
-(The [Architecture lesson](/learn/architecture) covers
-the static vs. dynamic distinction — filesystem and process are static; network is dynamic.)
+([What Is OpenShell?](/learn/what-is-openshell) introduced the split: filesystem and
+process are static; network is dynamic.)
 
 ### Verify Binary Paths
 
@@ -425,15 +426,16 @@ Network binary restrictions compare the executed path, so resolve symlinks befor
 openshell sandbox exec -n "$CLAW_SANDBOX" -- sh -lc 'command -v curl; readlink -f $(command -v curl)'
 ```
 
-**Expected output:**
+**Expected output:** the path `curl` is found at, then the path it resolves to. When
+`curl` is not a symlink the two lines are the same:
 
 ```text
 /usr/bin/curl
-/usr/local/bin/openclaw
+/usr/bin/curl
 ```
 
-> ⚠️ **As of v0.1.x** — binary paths may differ in future sandbox images. Always verify
-> with `which` before writing binary restrictions.
+> ⚠️ Binary paths can differ between sandbox images. Always verify with `which` before
+> writing binary restrictions.
 
 We'll use these exact paths in all `binaries` entries below. If your sandbox shows different
 paths, substitute those.
@@ -447,10 +449,16 @@ will make outbound requests.
 openshell sandbox exec -n "$CLAW_SANDBOX" -- which openclaw
 ```
 
+**Expected output:**
+
+```text
+/usr/local/bin/openclaw
+```
+
 ### Building Your First Network Policy Entry
 
 Start with an empty `network_policies` section and add the NVIDIA inference endpoint
-field by field. The [Policy Schema Reference](https://docs.nvidia.com/openshell/reference/policy-schema)
+field by field. The [Policy Schema Reference](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema)
 documents every field shown below.
 
 **Step 1 — the policy key and name:**
@@ -487,6 +495,9 @@ Each field does:
 
 > 💡 **TLS note:** The proxy terminates TLS automatically for L7 inspection — no
 > configuration needed.
+
+This fragment is not a complete entry yet. OpenShell rejects a `rest` endpoint that has
+neither `rules` nor an `access` preset, because nothing would say which requests it allows.
 
 **Step 3 — add L7 rules:**
 
@@ -550,9 +561,9 @@ how the egress proxy fits into the overall system.
 
 #### A Real-World Example: Sentry.io
 
-The default OpenShell policy blocks `POST` to sentry.io but allows `GET`. Sentry is
-multi-tenant SaaS, so allowing `POST` creates a generic data-exfiltration channel — a
-compromised agent could send arbitrary data to a Sentry project controlled by the attacker
+Sentry is multi-tenant SaaS, so a rule that allows `POST` to sentry.io is a general
+data-exfiltration channel: a compromised agent could send arbitrary data to a Sentry
+project controlled by the attacker
 (see [NemoClaw #1437](https://github.com/NVIDIA/NemoClaw/issues/1437)).
 
 Here's a restrictive sentry.io policy:
@@ -575,7 +586,7 @@ could exfiltrate data.
 
 > 🔒 **Security Note:** Any multi-tenant SaaS endpoint where POST is allowed is a potential
 > exfiltration channel. Always use the most restrictive access preset that still allows
-> the functionality you need. See [Security Best Practices](https://docs.nvidia.com/openshell/security/best-practices)
+> the functionality you need. See [Security Best Practices](https://docs.nvidia.com/openshell/v0.0.116/security/best-practices)
 > for more guidance on endpoint classification.
 
 ---
@@ -587,7 +598,7 @@ You now have every section a policy needs. The next command writes them to one f
 Two details matter:
 
 - **Static domains are fixed at creation.** `filesystem_policy`, `landlock`, and `process` cannot change on a running sandbox, so you prove them against a sandbox *created* with this policy rather than against the managed `agent` sandbox.
-- **`curl` may reach the NVIDIA endpoint.** The lab policy lists `/usr/bin/curl` next to `openclaw` so you can probe the endpoint by hand in Part 5. A production policy would list only the agent binary.
+- **`curl` may reach the NVIDIA endpoint.** The lab policy lists `/usr/bin/curl` next to `openclaw` so you can probe the endpoint by hand in Part 5. A production policy would list only the programs the agent really uses.
 
 ```bash
 cat > sandbox-lab.policy.yaml <<'EOF'
@@ -632,17 +643,17 @@ network_policies:
 EOF
 ```
 
-Resolve the NVIDIA-backed provider available on this host and create the lab sandbox with it. **Expected result:** the command names a supported provider and `policy-lab` becomes Ready. Attaching the provider is what lets the privacy router inject credentials in Part 5.
+Create the lab sandbox from that file. **Expected result:** `policy-lab` becomes Ready. No provider is attached to it, so this sandbox can be allowed to reach a model endpoint without ever being handed a credential. Part 5 uses that to separate the two questions.
 
 ```bash
-claw sandbox-create policy-lab --policy sandbox-lab.policy.yaml --nvidia-provider
+claw sandbox-create policy-lab --policy sandbox-lab.policy.yaml
 ```
 
 ```check
 task: "The `policy-lab` sandbox exists and is Ready."
 command: |
   openshell sandbox list | awk -v name="policy-lab" 'NR > 1 && $1 == name' | grep -q Ready
-hint: "Sandbox creation can take a minute. Rerun the step if it timed out."
+hint: "Sandbox creation can take a few minutes the first time, while the image downloads. Press Check again: the sandbox may have become Ready by itself. If `openshell sandbox list` still does not show it as Ready, run `openshell sandbox delete policy-lab`, then run the step again."
 success: "The lab sandbox is running under the policy you wrote."
 ```
 
@@ -796,63 +807,16 @@ openshell policy update agent --add-allow 'api.github.com:443:GET:/repos/**'
 
 ### 5.4 Inference
 
-**The policy schema has no top-level `inference` key.** Inference is controlled through two mechanisms working together:
+**The policy schema has no top-level `inference` key.** Access to a model is decided by two
+mechanisms working together:
 
-- **Network policies** -- which inference endpoints the sandbox can reach
-- **The provider system** -- how credentials are injected into the sandbox
+- **Network policies** decide which model endpoints the sandbox can reach, with which HTTP
+  methods and paths, and from which program.
+- **Providers** decide whether a credential is supplied for the request, and keep the real
+  key outside the sandbox.
 
-The `nvidia` entry you wrote in Part 3 *is* your inference policy. It controls which inference endpoint the sandbox can reach, which HTTP methods are allowed, and which binary can make the connection. To switch to a different inference provider, add a network policy entry for that provider's endpoint. The [Inference About](https://docs.nvidia.com/openshell/inference/about) page explains the full rationale.
-
-#### The privacy router and `inference.local`
-
-Inside the sandbox, the agent never talks to `integrate.api.nvidia.com` directly.
-All inference calls go through a virtual hostname called **[`inference.local`](https://docs.nvidia.com/openshell/inference/about)**.
-This indirection is what makes credential isolation possible -- the agent code never
-needs to know which backend it's talking to or what the real API key is.
-See [Inference Configuration](https://docs.nvidia.com/openshell/inference/configure) for
-the full setup guide.
-
-```
-Agent (inside sandbox)
-  │  curl https://inference.local/v1/chat/completions
-  │  -H "Authorization: Bearer openshell:resolve:env:NVIDIA_API_KEY"
-  │
-  ▼
-Egress Proxy (10.200.0.1:3128)
-  │  1. Intercepts CONNECT inference.local:443
-  │  2. Terminates TLS (CN=inference.local, signed by openshell-ca.pem)
-  │  3. Strips any credentials the sandbox code included
-  │  4. Resolves placeholder → injects the real NVIDIA_API_KEY
-  │  5. Rewrites destination to integrate.api.nvidia.com
-  │
-  ▼
-NVIDIA NIM API (integrate.api.nvidia.com:443)
-```
-
-**How it works:**
-
-- **`inference.local`** is not a real DNS name — the egress proxy intercepts it before
-  DNS resolution. The proxy handles TLS termination with a self-signed cert that the
-  sandbox trusts via `/etc/openshell-tls/openshell-ca.pem`.
-- **Placeholder tokens** — Inside the sandbox, `$NVIDIA_API_KEY` contains the string
-  `openshell:resolve:env:NVIDIA_API_KEY` (not the real key). The proxy resolves this
-  to the actual credential before forwarding upstream.
-- **Credential isolation** — The real API key never enters the sandbox. Even if the
-  agent is compromised, it cannot exfiltrate credentials because it never has them.
-- **Fail-closed** — If the proxy can't resolve a placeholder, it returns HTTP 500
-  rather than forwarding the raw placeholder to the upstream server.
-- **Gateway-scoped** — All agents in the sandbox share the same `inference.local`
-  backend. Switching providers with `openshell inference set` changes the route for
-  everyone.
-
-OpenClaw's config reflects this — check `openclaw config get models` and you'll see
-`"baseUrl": "https://inference.local/v1"`. The agent code never knows the real backend URL.
-
-> 🔒 **Security Note:** Placeholder resolution works in four places: HTTP headers,
-> basic auth, query parameters, and URL path segments. The proxy resolves placeholders
-> wherever they appear, so the agent doesn't need to know anything about the real
-> credential format. See [Security Best Practices](https://docs.nvidia.com/openshell/security/best-practices)
-> for credential management guidance.
+The `nvidia` entry you wrote in Part 3 *is* the inference policy of your lab sandbox. To allow
+a different model service, you would add a network policy entry for that service's endpoint.
 
 #### Blocked: OpenAI endpoint (not in your policy)
 
@@ -866,57 +830,118 @@ openshell sandbox exec -n policy-lab -- curl -sv https://api.openai.com/v1/model
 The `403 Forbidden` comes from the egress proxy, not from OpenAI. The request never
 left the sandbox.
 
-#### Allowed: NVIDIA inference via the approved NVIDIA route
+#### Allowed: the NVIDIA endpoint, but only what the rules list
 
-Now try the allowed endpoint with a compact models probe. In practice, the agent always calls `inference.local` —
-the proxy rewrites it to the real backend. You can also call `integrate.api.nvidia.com`
-directly when it is in the network policy.
-
-The `Authorization` header uses the **placeholder token**
-`openshell:resolve:env:NVIDIA_API_KEY` — the privacy router intercepts the request
-and swaps the placeholder for your actual key before it reaches NVIDIA's servers.
+The policy allows `GET /v1/models` on the NVIDIA endpoint. NVIDIA serves that list without
+a key, so it is a clean test of the network rule alone. **Expected result:** `HTTP_STATUS=200`.
 
 ```bash
-openshell sandbox exec -n policy-lab --timeout 20 -- sh -lc 'curl -sS -o /dev/null -w "HTTP_STATUS=%{http_code}\n" https://integrate.api.nvidia.com/v1/models -H "Authorization: Bearer openshell:resolve:env:NVIDIA_API_KEY"'
+openshell sandbox exec -n policy-lab --timeout 20 -- sh -lc 'curl -sS -o /dev/null -w "HTTP_STATUS=%{http_code}\n" https://integrate.api.nvidia.com/v1/models'
 ```
 
-Repeat the model-catalog request through the stable `inference.local` endpoint used by agents. **Expected result:** the probe prints `HTTP_STATUS=200`. This matters because direct backend reachability does not prove that the protected agent route works.
+The same host, but a path the policy does not list. **Expected result:** `HTTP_STATUS=403`,
+from the proxy. The rule is about the request, not only about the server.
 
 ```bash
-openshell sandbox exec -n policy-lab --timeout 20 -- sh -lc 'curl -sS -o /dev/null -w "HTTP_STATUS=%{http_code}\n" https://inference.local/v1/models -H "Authorization: Bearer openshell:resolve:env:NVIDIA_API_KEY"'
+openshell sandbox exec -n policy-lab --timeout 20 -- sh -lc 'curl -sS -o /dev/null -w "HTTP_STATUS=%{http_code}\n" -X POST https://integrate.api.nvidia.com/v1/embeddings'
 ```
 
-Inspect the credential value exposed inside the sandbox. **Expected result:** the value is an `openshell:resolve:env:NVIDIA_API_KEY` placeholder, never a real key. This matters because OpenShell should resolve credentials only at the proxy boundary.
+Being allowed to reach a model endpoint is not the same as being able to use a model. Look
+for a credential in the lab sandbox:
 
 ```bash
-openshell sandbox exec -n policy-lab --timeout 10 -- sh -c 'echo $NVIDIA_API_KEY'
+openshell sandbox exec -n policy-lab --timeout 10 -- sh -c 'echo "KEY=${NVIDIA_INFERENCE_API_KEY:-none}"'
 ```
+
+It prints `KEY=none`. Nobody attached a provider to this sandbox, so it holds nothing it
+could send.
+
+#### Credentials: a placeholder, swapped at the boundary
+
+The managed `agent` sandbox is different. When setup created it, NemoClaw attached an NVIDIA
+**provider** to it. OpenShell keeps the real key on the host and gives the sandbox a
+placeholder instead:
+
+```text
+Agent (inside the sandbox)
+  │  POST https://integrate.api.nvidia.com/v1/chat/completions
+  │  Authorization: Bearer openshell:resolve:env:v3_NVIDIA_INFERENCE_API_KEY
+  │
+  ▼
+OpenShell egress proxy (10.200.0.1:3128), at the sandbox boundary
+  │  1. Is this host, method, and path allowed for this program?
+  │  2. Does the placeholder belong to the provider attached to this sandbox,
+  │     and is this that provider's own endpoint?
+  │  3. Replace the placeholder with the real key
+  │
+  ▼
+NVIDIA endpoints (integrate.api.nvidia.com:443)
+```
+
+**How it works:**
+
+- **Placeholder tokens.** Inside the sandbox, `$NVIDIA_INFERENCE_API_KEY` holds a string
+  such as `openshell:resolve:env:v3_NVIDIA_INFERENCE_API_KEY` (the `v3_` part varies),
+  not the key. The proxy
+  resolves it to the real credential as the request leaves.
+- **Credential isolation.** The real key never enters the sandbox. An agent that has been
+  talked into misbehaving cannot leak a key it does not have.
+- **Bound to one endpoint.** A placeholder is only resolved on its own provider's endpoint.
+  Sent to any other server, even one the network policy allows, the proxy answers
+  `403` and the key stays where it is.
+- **Fail-closed.** If the proxy cannot resolve a placeholder, it returns an error instead of
+  forwarding the placeholder to the server.
+- **Per sandbox.** The provider is attached to one sandbox. Changing the model of one sandbox
+  does not change another.
+
+Look at what the managed sandbox holds. **Expected result:** a placeholder that starts with
+`openshell:resolve:env:`, never a value that starts with `nvapi-`.
+
+```bash
+openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 10 -- sh -c 'echo "KEY=${NVIDIA_INFERENCE_API_KEY:-none}"'
+```
+
+Now prove that the placeholder is enough. `claw inference-check` asks NemoClaw to send one
+real model request from inside that sandbox, along the path in the diagram, and reports
+whether a model answered.
+
+```bash
+claw inference-check
+```
+
+> **`inference.local`.** OpenShell has a second way to reach a model: a shared route at
+> `https://inference.local`, where the gateway picks the model and adds the credential.
+> NemoClaw still uses it for a few setups, such as a local NVIDIA NIM. For NVIDIA's hosted
+> endpoints it used that route in earlier releases and now attaches a provider to each
+> sandbox instead. See
+> [OpenShell inference](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/inference-routing).
 
 ```check
-task: "Inference works through `inference.local`, an unlisted provider is blocked, and the sandbox holds only a credential placeholder."
+task: "An unlisted model service is blocked, the listed one is reachable, and the managed sandbox answers through a placeholder, never a real key."
 command: |
-  ! openshell sandbox exec -n policy-lab -- curl -s -o /dev/null https://api.openai.com/v1/models || exit 1
-  status=$(openshell sandbox exec -n policy-lab --timeout 20 -- sh -lc 'curl -sS -o /dev/null -w "%{http_code}" https://inference.local/v1/models -H "Authorization: Bearer openshell:resolve:env:NVIDIA_API_KEY"')
-  seen=$(openshell sandbox exec -n policy-lab --timeout 10 -- sh -c 'echo $NVIDIA_API_KEY')
+  ! openshell sandbox exec -n policy-lab -- curl -s -o /dev/null https://api.openai.com/v1/models || { echo "api.openai.com was not blocked."; exit 1; }
+  status=$(openshell sandbox exec -n policy-lab --timeout 20 -- sh -lc 'curl -sS -o /dev/null -w "%{http_code}" https://integrate.api.nvidia.com/v1/models')
   echo "HTTP_STATUS=$status"
   [ "$status" = 200 ] || exit 1
-  case "$seen" in openshell:resolve:env:*NVIDIA_API_KEY) ;; *) echo "No placeholder seen."; exit 1 ;; esac
-hint: "Each of the four commands above should behave as described. If `inference.local` fails, check `openshell provider list`."
-success: "The agent can only reach approved endpoints, and it never has the real key."
+  seen=$(openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 10 -- sh -c 'echo "KEY=${NVIDIA_INFERENCE_API_KEY:-}${NVIDIA_API_KEY:-}"') || exit 1
+  case "$seen" in *nvapi-*) echo "A real key is visible inside the sandbox."; exit 1 ;; esac
+  claw inference-check
+hint: "Run the cells above in order. If `claw inference-check` says busy, another nemoclaw cell is still running: wait for it and check again. If it fails, `nemoclaw \"$CLAW_SANDBOX\" status` shows which part of the sandbox is unhealthy."
+success: "The network policy decides where a request may go, and the provider supplies the key without the sandbox ever holding it."
 ```
 
 You just saw three things:
 
-1. **Direct call to `integrate.api.nvidia.com`** — worked because the network policy
-   allows it, and the privacy router resolved the placeholder credential
-2. **Call through `inference.local`** — same result, but this is the path the agent
-   actually uses. The proxy intercepted `inference.local`, resolved the credential,
-   and forwarded to the real backend without the sandbox knowing the URL
-3. **The placeholder token** — `openshell:resolve:env:NVIDIA_API_KEY` is what the
-   sandbox sees. The real key exists only in the proxy layer
+1. **The network rule.** The lab sandbox reached `GET /v1/models` on the NVIDIA endpoint,
+   was refused on a path the policy does not list, and was refused on a host the policy
+   does not mention.
+2. **No provider, no credential.** The lab sandbox could reach the endpoint and still held
+   nothing it could use to call a model.
+3. **The placeholder.** The managed sandbox holds a placeholder, and a real model request
+   still succeeded, because OpenShell swapped in the key after the request left.
 
-That's the full inference security model: the agent can only reach endpoints allowed
-by the network policy, and it never has real credentials.
+That is the full inference security model: the agent can only reach endpoints the network
+policy allows, and it never has real credentials.
 
 ### Cleanup
 
@@ -943,11 +968,11 @@ success: "The lab sandbox is cleaned up; the course sandbox is untouched."
 The graded checks above verify each domain. Before moving on, all of these should hold:
 
 1. Your independent policy design passed `claw check-fs-policy`.
-2. The root policy was rejected and left no `process-root-rejected` sandbox.
+2. The root policy was rejected and left no `root-rejected` sandbox.
 3. In the lab sandbox, the `/tmp` write succeeded and the `/sandbox` write was denied with a permission error, not a "file not found" error.
 4. `whoami` in the lab sandbox returned `sandbox`.
 5. `httpbin.org` was blocked, then allowed after `claw policy-add`, with the sandbox staying Ready across the change.
-6. `api.openai.com` was blocked, `inference.local` answered with `HTTP_STATUS=200`, and the sandbox held only a credential placeholder.
+6. `api.openai.com` was blocked, the NVIDIA model list answered with `HTTP_STATUS=200`, and the managed sandbox answered a model request while holding only a credential placeholder.
 
 If one does not hold, rerun that step and its check. For the static domains (filesystem and process), fix the policy file, delete `policy-lab`, and create it again: those domains cannot change on a running sandbox.
 
@@ -961,7 +986,7 @@ If one does not hold, rerun that step and its check. For the static domains (fil
 - Saw OpenShell reject a root process identity before any sandbox started
 - Proved an allowed and a blocked filesystem write, and kept the denial instead of widening `/sandbox`
 - Hot-reloaded a network rule on a running sandbox: blocked, updated, allowed
-- Made a routed inference call and confirmed the sandbox only ever sees a credential placeholder
+- Separated reaching a model endpoint from holding a credential, and confirmed the managed sandbox only ever sees a placeholder
 
 ## Next Steps
 
@@ -969,14 +994,13 @@ Continue to **[NemoClaw with OpenClaw](/learn/nemoclaw-openclaw)** -- you'll see
 
 ---
 **Sources:**
-[Policy Customization](https://docs.nvidia.com/openshell/sandboxes/policies) ·
-[Policy Schema Reference](https://docs.nvidia.com/openshell/reference/policy-schema) ·
-[Default Policy](https://docs.nvidia.com/openshell/reference/default-policy) ·
-[First Network Policy Tutorial](https://docs.nvidia.com/openshell/tutorials/first-network-policy) ·
-[Inference About](https://docs.nvidia.com/openshell/inference/about) ·
-[Inference Configuration](https://docs.nvidia.com/openshell/inference/configure) ·
-[Manage Providers](https://docs.nvidia.com/openshell/sandboxes/manage-providers) ·
-[Accessing Logs](https://docs.nvidia.com/openshell/observability/accessing-logs) ·
-[Security Best Practices](https://docs.nvidia.com/openshell/security/best-practices) ·
+[Policy Customization](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/policies) ·
+[Policy Schema Reference](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) ·
+[Default Policy](https://docs.nvidia.com/openshell/v0.0.116/reference/default-policy) ·
+[First Network Policy Tutorial](https://docs.nvidia.com/openshell/v0.0.116/get-started/tutorials/first-network-policy) ·
+[OpenShell inference](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/inference-routing) ·
+[Manage Providers](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-providers) ·
+[Accessing Logs](https://docs.nvidia.com/openshell/v0.0.116/observability/accessing-logs) ·
+[Security Best Practices](https://docs.nvidia.com/openshell/v0.0.116/security/best-practices) ·
 [Architecture](https://docs.nvidia.com/openshell/about/architecture) ·
 [GitHub](https://github.com/NVIDIA/OpenShell)

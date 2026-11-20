@@ -58,7 +58,7 @@ def _validate_openclaw_component(value: object, *, field: str) -> str:
 
 
 def _validate_openclaw_agent_id(value: object) -> str:
-    """Return an exact canonical OpenClaw 2026.6.10 agent ID.
+    """Return an exact canonical OpenClaw 2026.10.5 agent ID.
 
     OpenClaw normalizes agent IDs to lowercase and limits them to 64 ASCII
     slug characters. Rejecting non-canonical input before mutation prevents a
@@ -650,10 +650,45 @@ def resolve_course_sandbox_name(
     return None
 
 
+# Compare a staged skill with the installed copy, inside the sandbox.
+# Exit codes: 0 identical, 10 not installed, 11 different, 20-23 unsafe to compare.
+_SKILL_COMPARE_SCRIPT = r"""
+set -eu
+source_dir=$1
+dest_dir=$2
+if [ -L "$dest_dir" ]; then exit 20; fi
+if [ ! -e "$dest_dir" ]; then exit 10; fi
+[ -d "$dest_dir" ] || exit 21
+if find "$dest_dir" -type l -print -quit | grep -q .; then exit 22; fi
+set +e
+# OpenClaw records where an installed skill came from in <skill>/.openclaw/, which
+# the course source does not have. Compare everything else.
+diff -qr -x .openclaw -- "$source_dir" "$dest_dir" >/dev/null
+code=$?
+set -e
+[ "$code" -eq 0 ] && exit 0
+[ "$code" -eq 1 ] && exit 11
+exit 23
+"""
+
+
 def resolve_nvidia_provider_name(
-    preferred: tuple[str, ...] = ("nvidia-inference", "nvidia-prod", "nvidia-nim"),
+    preferred: tuple[str, ...] = (
+        "nemoclaw-nvidia-prod-v1",
+        "nvidia-inference",
+        "nvidia-prod",
+        "nvidia-nim",
+    ),
 ) -> str | None:
-    """Resolve the most likely NVIDIA-backed provider name for the current host."""
+    """Resolve the most likely NVIDIA-backed provider name for the current host.
+
+    NemoClaw v0.0.145 registers its hosted NVIDIA provider as
+    ``nemoclaw-nvidia-prod-v1`` and attaches it to the sandbox it manages. The
+    other names are what earlier releases and standalone OpenShell setups used.
+
+    Use the result to report what exists. NemoClaw tracks ownership of its own
+    provider, so do not attach it to another sandbox, rename it or delete it.
+    """
     provider_names = _list_provider_names()
     for name in preferred:
         if name in provider_names:
@@ -806,7 +841,7 @@ def ensure_openclaw_gateway(
     def _gateway_version_status() -> tuple[str, str]:
         """Return ``match``, ``mismatch``, or ``unverifiable`` plus detail.
 
-        OpenClaw 2026.6.10 exposes CLI, gateway, and RPC summaries in the
+        OpenClaw 2026.10.5 exposes CLI, gateway, and RPC summaries in the
         machine-readable daemon-status payload. Human status output is
         intentionally not parsed because its presentation is not an API.
         """
@@ -1055,7 +1090,11 @@ _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _list_dashboard_forwards() -> list[dict[str, object]]:
-    """Return strictly parsed OpenShell 0.0.72 forward inventory records."""
+    """Return strictly parsed OpenShell 0.0.116 forward inventory records.
+
+    NemoClaw v0.0.145 runs its dashboard forward as an ``openshell forward service``
+    process, which this inventory does not list.
+    """
     try:
         result = subprocess.run(
             ["openshell", "forward", "list"],
@@ -1715,9 +1754,12 @@ def create_and_onboard_agent(
                 "workspace and rerun with update_existing=True to repair it explicitly"
             )
         if existing_summary.get("identitySource") == "identity":
+            # This agent's identity lives in a workspace file somebody wrote. The
+            # helper repairs identity through OpenClaw's config only and never
+            # rewrites workspace files, so it leaves such an agent alone.
             return False, (
-                f"agent '{agent_id}' loads identity from IDENTITY.md; config-only identity "
-                "repair would be ineffective, so existing state was preserved"
+                f"agent '{agent_id}' loads identity from IDENTITY.md; this helper does not "
+                "rewrite workspace identity files, so existing state was preserved"
             )
 
     created = False
@@ -1951,28 +1993,12 @@ def deploy_skill_to_agent(
                 f"{(upload.stderr or upload.stdout).strip()[-200:]}"
             )
         else:
-            compare_script = r"""
-set -eu
-source_dir=$1
-dest_dir=$2
-if [ -L "$dest_dir" ]; then exit 20; fi
-if [ ! -e "$dest_dir" ]; then exit 10; fi
-[ -d "$dest_dir" ] || exit 21
-if find "$dest_dir" -type l -print -quit | grep -q .; then exit 22; fi
-set +e
-diff -qr -- "$source_dir" "$dest_dir" >/dev/null
-code=$?
-set -e
-[ "$code" -eq 0 ] && exit 0
-[ "$code" -eq 1 ] && exit 11
-exit 23
-"""
             compared = _sandbox_exec(
                 sandbox,
                 [
                     "sh",
                     "-c",
-                    compare_script,
+                    _SKILL_COMPARE_SCRIPT,
                     "course-skill-compare",
                     staged_skill,
                     dest_dir,
@@ -2040,7 +2066,7 @@ exit 23
                         [
                             "sh",
                             "-c",
-                            compare_script,
+                            _SKILL_COMPARE_SCRIPT,
                             "course-skill-compare",
                             staged_skill,
                             dest_dir,

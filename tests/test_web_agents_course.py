@@ -21,6 +21,10 @@ from web.lessons import load_courses, load_lessons
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COURSE_DIR = REPO_ROOT / "web" / "courses" / "01_agents"
 LESSON_FILES = sorted(COURSE_DIR.glob("*.md"))
+# Course 2 opens with one more Python lesson, which connects the agent built here to
+# the products that course runs. It gets the same treatment as this course's lessons.
+BRIDGE_LESSON = REPO_ROOT / "web" / "courses" / "02_claw" / "00_agent_harness.md"
+PYTHON_LESSON_FILES = [*LESSON_FILES, BRIDGE_LESSON]
 
 EXPECTED_ORDER = [
     "start-here",
@@ -167,18 +171,24 @@ def test_the_site_serves_agents_before_claw_with_unique_slugs():
     assert {lesson.slug: lesson.keys for lesson in claw.lessons if lesson.keys} == {
         "setup": ("NVIDIA_API_KEY",)
     }
+    # The bridge lesson runs on a stand-in model, so its Python cells are given no key.
+    bridge = claw.lessons[0]
+    assert bridge.slug == "agent-harness" and bridge.kernel == "python"
+    assert bridge.keys_declared and not bridge.kernel_sees("NVIDIA_API_KEY")
+    # Course 1's lessons call the model from the learner's own code, so they are.
+    assert all(lesson.kernel_sees("NVIDIA_API_KEY") for lesson in agents.lessons)
     slugs = [lesson.slug for course in courses for lesson in course.lessons]
     assert len(slugs) == len(set(slugs))
 
 
-@pytest.mark.parametrize("path", LESSON_FILES, ids=lambda path: path.stem)
+@pytest.mark.parametrize("path", PYTHON_LESSON_FILES, ids=lambda path: path.stem)
 def test_lesson_links_point_at_real_lessons(path):
     known = {lesson.slug for course in load_courses(COURSE_DIR.parent) for lesson in course.lessons}
     for target in re.findall(r"\]\(/learn/([a-z0-9-]+)\)", path.read_text(encoding="utf-8")):
         assert target in known, f"{path.name} links to unknown lesson {target}"
 
 
-@pytest.mark.parametrize("path", LESSON_FILES, ids=lambda path: path.stem)
+@pytest.mark.parametrize("path", PYTHON_LESSON_FILES, ids=lambda path: path.stem)
 def test_every_cell_runs_and_every_check_passes(path, tmp_path):
     slug = re.sub(r"^\d+_", "", path.stem).replace("_", "-")
     expected_errors = list(EXPECTED_ERRORS.get(slug, []))
@@ -213,7 +223,7 @@ def test_every_cell_runs_and_every_check_passes(path, tmp_path):
     assert not (tmp_path / "injected.txt").exists(), "a lesson left a file behind"
 
 
-@pytest.mark.parametrize("path", LESSON_FILES, ids=lambda path: path.stem)
+@pytest.mark.parametrize("path", PYTHON_LESSON_FILES, ids=lambda path: path.stem)
 def test_exercise_stubs_fail_their_check_until_solved(path, tmp_path):
     """An exercise must not pass before the learner does the work."""
     blocks = _blocks(path)
@@ -240,6 +250,6 @@ def test_exercise_stubs_fail_their_check_until_solved(path, tmp_path):
 
 
 def test_lessons_never_contain_a_real_looking_key():
-    for path in LESSON_FILES:
+    for path in PYTHON_LESSON_FILES:
         text = path.read_text(encoding="utf-8")
         assert not re.search(r"(nvapi|tvly)-[A-Za-z0-9_-]{12,}", text), path.name

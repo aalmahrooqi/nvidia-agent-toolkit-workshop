@@ -139,8 +139,11 @@ class KernelPool:
             _, oldest = min(idle)
             await self._kernels.pop(oldest).shutdown()
 
-    def for_session(self, session: str) -> list[Kernel]:
-        return [kernel for (owner, _), kernel in self._kernels.items() if owner == session]
+    def for_session(self, session: str) -> dict[str, Kernel]:
+        """That session's kernels, by lesson."""
+        return {
+            lesson: kernel for (owner, lesson), kernel in self._kernels.items() if owner == session
+        }
 
     async def restart(self, session: str, lesson: str) -> None:
         kernel = self._kernels.pop((session, lesson), None)

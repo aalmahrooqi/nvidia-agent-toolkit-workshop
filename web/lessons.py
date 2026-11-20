@@ -3,8 +3,12 @@
 A course is a directory holding a ``course.yaml`` and its lessons. A lesson is
 a Markdown file with a YAML front-matter block (``title``, ``subtitle``,
 ``minutes``, and optionally ``kernel: python`` and ``keys``). ``keys`` lists the
-API keys the lesson's bash cells receive as environment variables once the
-learner has saved them in the page; cells in other lessons never see them.
+API keys the lesson's cells receive as environment variables once the learner
+has saved them in the page. Bash cells get the listed keys and nothing else, so
+a lesson without ``keys`` gives its bash cells none. A Python kernel gets the
+listed keys when the lesson has a ``keys`` entry (``keys: []`` means none) and
+every saved key when it has no entry, because that learner's own code is what
+calls the model.
 Some fenced blocks get special treatment:
 
 * ``bash`` / ``sh`` / ``shell`` fences render as cells: editable code with a Run
@@ -27,6 +31,10 @@ Some fenced blocks get special treatment:
 * ``agent-map`` fences draw the agent diagram filled in up to ``step``: YAML with
   ``step`` (``none``, ``llm``, ``memory``, ``tools``, ``search``, ``loop``,
   ``guardrails``, or ``sandbox``) and optionally ``caption``.
+* ``stack-map`` fences draw where that agent sits in the NemoClaw stack: the
+  harness inside the OpenShell sandbox, with NemoClaw beside it. Optional YAML:
+  ``layer`` (``harness``, ``openshell``, or ``nemoclaw``) highlights one layer,
+  and ``caption`` replaces the default caption.
 
 Links to other sites (``https://...``) open in a new tab; links to lessons and
 assets open in place.
@@ -82,13 +90,19 @@ class Lesson:
     kernel: str = ""
     course: str = ""
     shell: bool = True
-    # API keys this lesson's bash cells are given, once saved in the page.
+    # API keys this lesson's cells are given, once saved in the page.
     keys: tuple[str, ...] = ()
+    # Whether the front matter had a ``keys`` entry at all (``keys: []`` counts).
+    keys_declared: bool = False
     # How many blocks need the live shell.
     terminal_blocks: int = 0
 
     def check(self, check_id: str) -> Check | None:
         return next((check for check in self.checks if check.id == check_id), None)
+
+    def kernel_sees(self, name: str) -> bool:
+        """Whether this lesson's Python kernel is given the saved key ``name``."""
+        return name in self.keys if self.keys_declared else True
 
 
 @dataclass(frozen=True)
@@ -262,6 +276,127 @@ def _agent_map(code: str) -> str:
     )
 
 
+STACK_LAYERS = ("harness", "openshell", "nemoclaw")
+# The parts of the from-scratch agent that make up the harness box.
+_STACK_PARTS = ("llm", "memory", "tools", "loop", "guardrails")
+_STACK_CAPTION = (
+    "The code you wrote is the harness in the middle. The model it calls sits outside, at "
+    "the model provider. OpenShell is the boundary around the harness, and NemoClaw sets "
+    "both up."
+)
+
+
+# What the picture shows, for a screen reader. The caption is read separately.
+_STACK_DESCRIPTION = (
+    "Diagram: NemoClaw sets up an OpenShell sandbox. Inside it runs the agent harness: "
+    "model call, memory, tools, agent loop and guardrails. Requests to the model provider "
+    "and to the internet cross the sandbox boundary."
+)
+
+
+def _stack_map(code: str) -> str:
+    """Draw the NemoClaw stack with the from-scratch agent's parts inside the harness.
+
+    ``layer`` highlights the layer a lesson is about. Requests that leave the
+    harness cross the sandbox boundary at a marked point, where OpenShell acts.
+    """
+    fields = _yaml_mapping(code, "stack-map", {"layer", "caption"}) if code.strip() else {}
+    layer = str(fields.get("layer") or "")
+    if layer and layer not in STACK_LAYERS:
+        raise LessonError(f"stack-map 'layer' must be one of: {', '.join(STACK_LAYERS)}")
+    caption = str(fields.get("caption") or _STACK_CAPTION)
+
+    def box(name: str, x: int, y: int, width: int, height: int, radius: int, lines: list) -> str:
+        now = " sm-now" if name == layer else ""
+        text = "".join(
+            f'<text class="{kind}" x="{x + width // 2}" y="{line_y}">{html.escape(words)}</text>'
+            for kind, line_y, words in lines
+        )
+        return (
+            f'<g class="sm-layer sm-{name}{now}">'
+            f'<rect x="{x}" y="{y}" width="{width}" height="{height}" rx="{radius}"/>{text}</g>'
+        )
+
+    labels = {key: (label, icon) for key, label, icon in AGENT_PARTS}
+    # The model runs at the provider, outside the sandbox. What sits in the harness
+    # is the code that calls it.
+    labels["llm"] = ("Model call", labels["llm"][1])
+    # Three parts on the first row, two centred on the second.
+    spots = [(210, 150), (293, 150), (376, 150), (252, 204), (335, 204)]
+    parts = "".join(
+        f'<g class="sm-part"><rect x="{x}" y="{y}" width="74" height="44" rx="8"/>'
+        f'<text class="sm-icon" x="{x + 37}" y="{y + 15}">{labels[key][1]}</text>'
+        f'<text class="sm-part-label" x="{x + 37}" y="{y + 36}">'
+        f"{html.escape(labels[key][0])}</text></g>"
+        for key, (x, y) in zip(_STACK_PARTS, spots, strict=True)
+    )
+
+    def outside(y: int, name: str, note: tuple[str, str]) -> str:
+        middle = y + 25
+        return (
+            f'<line class="sm-arrow" x1="464" y1="{middle}" x2="508" y2="{middle}" '
+            'marker-end="url(#sm-arrowhead)"/>'
+            f'<circle class="sm-gate" cx="482" cy="{middle}" r="6"/>'
+            f'<g class="sm-outside"><rect x="512" y="{y}" width="116" height="50" rx="8"/>'
+            f'<text class="sm-title" x="570" y="{y + 30}">{name}</text>'
+            f'<text class="sm-sub" x="570" y="{y + 67}">{note[0]}</text>'
+            f'<text class="sm-sub" x="570" y="{y + 82}">{note[1]}</text></g>'
+        )
+
+    return (
+        '<figure class="stack-map">'
+        f'<svg viewBox="0 0 640 300" role="img" aria-label="{_STACK_DESCRIPTION}">'
+        '<defs><marker id="sm-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" '
+        'markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs>'
+        + box(
+            "nemoclaw",
+            12,
+            108,
+            128,
+            84,
+            10,
+            [
+                ("sm-title", 138, "NemoClaw"),
+                ("sm-sub", 158, "installs, configures"),
+                ("sm-sub", 173, "and repairs"),
+            ],
+        )
+        + '<line class="sm-arrow" x1="142" y1="150" x2="174" y2="150" '
+        'marker-end="url(#sm-arrowhead)"/>'
+        + box(
+            "openshell",
+            178,
+            14,
+            304,
+            272,
+            14,
+            [
+                ("sm-title", 40, "OpenShell sandbox"),
+                ("sm-sub", 58, "files, network and credentials,"),
+                ("sm-sub", 73, "enforced from outside the agent"),
+            ],
+        )
+        + box(
+            "harness",
+            198,
+            90,
+            264,
+            180,
+            12,
+            [
+                ("sm-title", 114, "Agent harness"),
+                ("sm-sub", 132, "OpenClaw, Hermes, or the one you built"),
+            ],
+        )
+        + parts
+        + outside(86, "Model provider", ("OpenShell adds", "your key here"))
+        + outside(180, "The internet", ("only what the", "policy allows"))
+        + "</svg>"
+        f"<figcaption>{_inline(caption)}</figcaption>"
+        "</figure>\n"
+    )
+
+
 class _LessonRenderer(mistune.HTMLRenderer):
     def __init__(self, kernel: str = "") -> None:
         super().__init__(escape=True)
@@ -284,6 +419,8 @@ class _LessonRenderer(mistune.HTMLRenderer):
             return self._key_block(code)
         if language == "agent-map":
             return _agent_map(code)
+        if language == "stack-map":
+            return _stack_map(code)
 
         body = html.escape(code.rstrip("\n"))
         if language == "solution":
@@ -404,6 +541,7 @@ def parse_lesson(text: str, slug: str) -> Lesson:
         checks=tuple(renderer.checks),
         kernel=kernel,
         keys=tuple(keys),
+        keys_declared="keys" in meta,
         terminal_blocks=renderer.terminal_blocks,
     )
 

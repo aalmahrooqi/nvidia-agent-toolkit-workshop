@@ -9,7 +9,7 @@ minutes: 25
 By the end of this lesson, you will be able to:
 
 - Validate the frontmatter and bounded commands in a canonical [SKILL.md](https://docs.openclaw.ai/tools/creating-skills)
-- Add a targeted [network policy](https://docs.nvidia.com/openshell/reference/policy-schema) for one API endpoint
+- Add a targeted [network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) for one API endpoint
 - Deploy canonical skill content to one verified [agent workspace](https://docs.openclaw.ai/concepts/agent-workspace)
 - Distinguish skill, policy, deployment, and live-response evidence
 - Independently harden the APOD response boundary with deterministic validation
@@ -149,16 +149,17 @@ my-skill/
 
 ### Skill Discovery Hierarchy
 
-OpenClaw 2026.6.10 checks these roots in highest-to-lowest precedence order:
+OpenClaw 2026.10.5 checks these seven tiers in highest-to-lowest precedence order:
 
 | Priority | Location | Visibility |
 |----------|----------|------------|
 | 1 | `<workspace>/skills/` | One agent workspace |
 | 2 | `<workspace>/.agents/skills/` | One project-agent workspace |
-| 3 | `~/.agents/skills/` | Personal skills visible to local agents |
-| 4 | `~/.openclaw/skills/` | Shared managed skills |
-| 5 | Bundled skills | Shipped with the installed OpenClaw build |
-| 6 | Extra directories and plugin skills | Lowest-precedence configured sources |
+| 3 | `~/.agents/skills/` | Personal skills for agents that use the default state directory |
+| 4 | `<state-dir>/skills/` (`~/.openclaw/skills/` by default) | Shared managed skills |
+| 5 | `<state-dir>/agents/<agentId>/agent/workshop-skills/` | Workshop skills that one agent saved for itself |
+| 6 | Bundled skills | Shipped with the installed OpenClaw build |
+| 7 | Extra directories and plugin skills | Lowest-precedence configured sources |
 
 Same-name skills resolve to the highest-precedence source. The number of bundled skills varies by build, so the lesson intentionally does not hardcode it.
 
@@ -172,10 +173,9 @@ documents.
 Work only with the supplied Python objects. The exercise never calls NASA or
 changes the sandbox policy.
 
-**Reasoning note:** In the course worksheet or LMS response for
-`nasa-response-hardening`, record 1–2 sentences explaining why both URLs belong
+**Before you run the check,** say in a sentence or two why both URLs belong
 inside the trust boundary, what evidence supports your answer, and what response
-would falsify it.
+would prove you wrong.
 
 Start from this stub in the lab folder:
 
@@ -258,9 +258,9 @@ def validate_apod_payload(payload):
 
 ## 3. Add the Network Policy
 
-OpenShell [sandboxes](https://docs.nvidia.com/openshell/sandboxes/manage-sandboxes)
+OpenShell [sandboxes](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes)
 run in a **zero-trust networking environment**: outbound access requires an explicit
-[network policy](https://docs.nvidia.com/openshell/reference/policy-schema). The
+[network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema). The
 egress proxy evaluates host, port, method, and path before a request leaves the
 sandbox.
 
@@ -331,9 +331,8 @@ success: The sandbox may reach exactly `GET api.nasa.gov/planetary/apod`.
 
 When a usable APOD rule was pre-existing or explicitly added, repeat the request, this
 time piping the response through the same hardened contract you wrote in the exercise.
-Give the proxy a few seconds to pick up the rule first. The request forces IPv4 because
-the sandbox proxy path to `api.nasa.gov` is more reliable that way on the verified Spark
-setup.
+Give the proxy a few seconds to pick up the rule first. The request forces IPv4, which
+has been the more reliable path through the sandbox proxy to `api.nasa.gov`.
 
 ```bash
 openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 45 -- curl -4 -fsS --max-time 45 'https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY' | claw validate-json apod
@@ -361,7 +360,7 @@ safe-mode skip produces no live-success claim.
 
 ## 4. Deploy the Skill to the NASA Explorer Agent
 
-OpenClaw 2026.6.10 supports exact-agent local-directory installs. When a source directory is already inside the sandbox, the native form is:
+OpenClaw supports exact-agent local-directory installs. When a source directory is already inside the sandbox, the native form is:
 
 ```text
 openshell sandbox exec -n agent --no-tty -- \
@@ -389,6 +388,8 @@ Ask OpenClaw how that agent resolves the skill. Look for `"source": "openclaw-wo
 ```bash
 openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 25 --no-tty -- openclaw skills info nasa-apod --agent nasa-apod --json
 ```
+
+If this cell or the deploy step reports an unknown agent id, the running gateway has not loaded the new agent yet: run `nemoclaw "$CLAW_SANDBOX" gateway restart` in a cell and rerun it.
 
 ```check
 task: The canonical `nasa-apod` skill is installed in the `nasa-apod` agent's workspace and visible to its model.
@@ -425,19 +426,25 @@ openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 45 -- curl -4 -fsS --max-tim
 ## 6. Try It Live
 
 Run this optional interaction only when the agent, skill, and policy checks above have
-all passed. Send the prompt to the exact agent inside the exact sandbox:
+all passed. Send the prompt to the exact agent inside the exact sandbox. The reply appears
+when the turn has finished:
 
 ```bash
-openshell sandbox exec -n "$CLAW_SANDBOX" --no-tty -- openclaw agent --agent nasa-apod --message "What is today's Astronomy Picture of the Day?"
+nemoclaw "$CLAW_SANDBOX" agent --agent nasa-apod \
+  -m "What is today's Astronomy Picture of the Day?"
 ```
 
-Resetting a session is a host-side NemoClaw lifecycle operation, not an in-chat `/new` message. If you want a clean transcript, replace `<session-key>` with the exact key shown in Sessions:
+If this reports an unknown agent id even though the agent check passed, the running gateway has not loaded the new agent yet: run `nemoclaw "$CLAW_SANDBOX" gateway restart` and send the prompt again. If the cell errors because the gateway is down, check it with `openshell sandbox exec -n "$CLAW_SANDBOX" -- openclaw gateway health`. If it reports `pairing required` or `scope upgrade pending approval`, wait a few seconds and run it again.
+
+Each run with `--agent nasa-apod` continues the same session; nothing resets it automatically. Resetting a session is a host-side NemoClaw lifecycle operation, not an in-chat `/new` message. If you want a clean transcript, reset the agent's main session:
 
 ```text
-nemoclaw agent sessions reset '<session-key>' --agent nasa-apod
+nemoclaw <sandbox> sessions reset agent:nasa-apod:main
 ```
 
-Print the dashboard URL and open it. On DGX Spark, use the tokenized root URL over the workstation SSH tunnel. Inspect the resulting entry in the Dashboard **Sessions** view.
+`<sandbox>` is the name the first cell of this lesson printed. If the reset stops with `scope upgrade pending approval`, it needs the same one-time approval that scheduling a job does; [Daily Financial Briefing](/learn/daily-financial-briefing) walks through it.
+
+Wait for the reply above, then print the dashboard address. It carries a sign-in token, so treat it like a password. The dashboard listens on the host the sandbox runs on; to open it from another computer, forward its port first, as the output explains. Then inspect the resulting entry in the Dashboard **Sessions** view.
 
 ```bash
 claw dashboard-url
@@ -449,7 +456,7 @@ claw dashboard-url
 - *"Show me the NASA photo from last Christmas"*
 - *"Show me the NASA photo from Christmas 2025"*
 
-> **Why `--agent nasa-apod`?** The skill is installed only for that agent's workspace. Omitting `--agent` can route to another agent that cannot see it.
+> **Why `--agent nasa-apod`?** The skill is installed only for that agent's workspace. An agent turn needs to be told which agent or session it is for: with nothing selected it stops with `No target session selected`, and naming another agent reaches one that cannot see the skill.
 
 ---
 
@@ -523,13 +530,13 @@ Continue to **[Daily Financial Briefing](/learn/daily-financial-briefing)** — 
 [NASA APOD API](https://api.nasa.gov/) ·
 [OpenClaw Skills Overview](https://docs.openclaw.ai/tools/skills) ·
 [Creating Skills (SKILL.md Spec)](https://docs.openclaw.ai/tools/creating-skills) ·
-[Network Policy Schema](https://docs.nvidia.com/openshell/reference/policy-schema) ·
-[Policy Customization](https://docs.nvidia.com/openshell/sandboxes/policies) ·
-[Sandbox Management](https://docs.nvidia.com/openshell/sandboxes/manage-sandboxes) ·
+[Network Policy Schema](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) ·
+[Policy Customization](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/policies) ·
+[Sandbox Management](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes) ·
 [Agent Workspaces](https://docs.openclaw.ai/concepts/agent-workspace) ·
 [SOUL.md](https://docs.openclaw.ai/concepts/soul) ·
 [NemoClaw Commands](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/reference/commands) ·
 [NemoClaw Agent Skills](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/resources/agent-skills) ·
-[Security Best Practices](https://docs.nvidia.com/openshell/security/best-practices) ·
-[Inference Routing / Privacy Router](https://docs.nvidia.com/openshell/inference/about) ·
+[Security Best Practices](https://docs.nvidia.com/openshell/v0.0.116/security/best-practices) ·
+[OpenShell Inference](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/inference-routing) ·
 [brevdev/nemoclaw-demos](https://github.com/brevdev/nemoclaw-demos)

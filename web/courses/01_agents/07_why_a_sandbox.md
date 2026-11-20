@@ -308,7 +308,7 @@ The control has to sit **outside** the agent, where nothing the model writes can
 |---|---|
 | The agent can write only in its own folder | The operating system, before the process starts |
 | The agent can reach only approved servers | A network proxy the process cannot bypass |
-| The agent never holds your API key | A gateway that adds the key after the request leaves the agent |
+| The agent never holds your API key | Something outside the agent that adds the key after the request leaves it |
 | The agent cannot switch any of this off | Somewhere the agent has no permission to change |
 
 That is a sandbox, and it is what the next course is about. NVIDIA's OpenShell runs an agent
@@ -350,5 +350,6 @@ shape underneath is the one you wrote.
 
 ## Next
 
-You know what an agent is and why it needs a boundary. Continue to the next course to build
-one: [Set Up Your Environment](/learn/setup).
+You know what an agent is and why it needs a boundary. The next course runs a production
+agent inside one. It starts by connecting the two:
+[From Your Agent to an Agent Harness](/learn/agent-harness).

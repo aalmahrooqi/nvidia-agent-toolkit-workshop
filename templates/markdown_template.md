@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # [Guide Title]
 
 **Estimated Time:** XX minutes
-**Prerequisites:** [List prerequisites, e.g., Docker installed, Node.js 22.16+]
+**Prerequisites:** [List prerequisites, e.g., Docker installed, Node.js 22.19+]
 **Platform:** Validated NemoClaw host (Ubuntu 24.04, DGX Spark, or Apple Silicon macOS with Colima)
 
 ## Learning Objectives
@@ -22,7 +22,7 @@ By the end of this guide, you will be able to:
 Before starting, verify the following prerequisites:
 
 - [ ] Docker is installed and running (`docker --version`)
-- [ ] Node.js 22.16+ is installed (`node --version`)
+- [ ] Node.js 22.19+ is installed (`node --version`)
 - [ ] NemoClaw CLI is installed (`nemoclaw --version`)
 - [ ] Sufficient disk space available (40GB recommended)
 

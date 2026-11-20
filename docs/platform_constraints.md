@@ -10,20 +10,18 @@ target run. “Static” means structure, links, schemas, and content contracts 
 “Safe-skip” means cells correctly refused to act on the wrong runtime. Neither is
 live product evidence.
 
-| Course surface | Valid target | Required capability | Current evidence (2026-07-10) |
+| Course surface | Valid target | Required capability | Current evidence (2026-11-20) |
 |---|---|---|---|
-| Module 1 concepts and architecture | Any authoring host | Python environment only | Cell-by-cell pass on Apple Silicon macOS |
-| Brev onboarding | Brev Launchable host | Managed NemoClaw 0.0.79 unit and NVIDIA credential | Static only; rerun Launchable sequence |
-| DGX Spark onboarding | DGX Spark | NGC Docker auth, NVIDIA Container Toolkit, managed vLLM image/model/route | Static only; rerun exact vLLM proof |
-| macOS onboarding | Apple Silicon macOS with dedicated Colima/Docker runtime | Managed NemoClaw 0.0.79 and hosted NVIDIA route | Static only; first-inference notebook is new |
-| Module 3 OpenClaw survey | Managed OpenClaw target | OpenClaw 2026.6.10 | Static; prior evidence is from the old stack |
-| Module 3 Pi / Deep Agents SDK comparison | Node/Python authoring host | Package metadata access | Metadata probes only; not a managed-agent run |
-| Module 4 managed policy labs | Exact managed OpenClaw target | Healthy OpenShell 0.0.72 gateway and disposable course sandbox | Static; prior live evidence is obsolete |
-| Module 4 direct-agent deep dive | Any authoring host | No live target required; compare bounded standalone deployment plans | Static reference only; it explicitly makes no launch/task/cleanup claim |
-| Module 5 OpenClaw branch | Exact managed OpenClaw target | Dashboard/gateway surface | Static; live rerun required |
-| Module 5 Hermes branch | Target provisioned with `nemohermes` and Hermes 0.17.0 | Hermes health/API surface and bearer-auth path; no OpenClaw dashboard | Supported product contract; course live-UAT pending |
-| Module 5 Deep Agents Code branch | Target provisioned with `nemo-deepagents` and `dcode` 0.1.34 | Terminal runtime; no OpenClaw dashboard | Safe-skip pass on Mac; managed live-UAT pending |
-| Modules 6–7 | Managed OpenClaw branch | Multiple workspaces, skills, dashboard sessions, and explicit mutation authority | Static; prior live evidence is obsolete |
+| `setup.sh` on Ubuntu 24.04 | Linux host with Docker | NVIDIA API key; network access to `ghcr.io`, `github.com`, and `registry.npmjs.org` | Tests against stand-in tools only; no live run on v0.0.145 |
+| `setup.sh` on Apple Silicon macOS | macOS with Docker Desktop or Colima | The same, plus a Node.js whose npm directories only you can write to | Tests against stand-in tools only; no live run on v0.0.145 |
+| Brev Launchable (`bootstrap.sh` and the site's Setup lesson) | Brev CPU instance | The port `3000` link; an NVIDIA API key entered in the page | Site binding and port handling ran on one test instance against the previous pin; nothing has run on v0.0.145 |
+| Course 1 site lessons (Agents from Scratch) | Any host that runs the site | NVIDIA API key; a Tavily key is optional | Every cell and check runs in the test suite against a stand-in model |
+| Course 2 lesson 1 (From Your Agent to an Agent Harness) | Any host that runs the site | None: a stand-in plays the model | Every cell and the check run in the test suite |
+| Course 2 lessons 2–9 | Host where `setup.sh` has completed | Managed NemoClaw 0.0.145 unit with OpenShell 0.0.116 and a healthy `agent` sandbox | Static, plus graded checks exercised against stand-in CLIs; no live run on v0.0.145 |
+| `tracks/` notebooks | None | None | Not ported to v0.0.145; use the site |
+
+The evidence column was reviewed on 2026-11-20 against the NemoClaw v0.0.145 unit.
+Nothing has been rerun on that stack, so no row holds live evidence for it.
 
 ## Promotion Rule
 

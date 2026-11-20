@@ -151,7 +151,7 @@ def test_pool_keeps_one_kernel_per_session_and_lesson(tmp_path):
             # A third notebook retires the least recently used idle kernel.
             await pool.get("session-c", "lesson-1", {})
             assert not first.alive
-            assert pool.for_session("session-b") == [other]
+            assert pool.for_session("session-b") == {"lesson-1": other}
 
             await pool.restart("session-b", "lesson-1")
             assert not other.alive

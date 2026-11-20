@@ -12,7 +12,7 @@
 #      when NVIDIA_API_KEY was supplied; otherwise learners enter their own
 #      key in the workshop site's Setup lesson
 #   4. registers the course's Python environment as the Jupyter `python3` kernel
-#   5. starts JupyterLab on the course directory
+#   5. starts JupyterLab on the course directory, only when CLAW_START_JUPYTER=1
 #   6. starts the workshop site (web/) where the instance's Brev link can reach it
 #
 # It makes no assumption about which user Brev runs it as or from which
@@ -33,7 +33,9 @@
 #                       into CLAW_COURSE_DIR, even if this script runs from another copy.
 #   CLAW_USER           Login user to install for when started as root (default: ubuntu).
 #   CLAW_COURSE_DIR     Checkout location (default: ~/claw-training-distilled).
-#   CLAW_START_JUPYTER  Set to 0 to skip starting JupyterLab.
+#   CLAW_START_JUPYTER  Set to 1 to also start JupyterLab. Off by default: the course is
+#                       the workshop site, and the notebooks under tracks/ have not
+#                       been ported to the pinned NemoClaw release.
 #   CLAW_JUPYTER_PORT   JupyterLab port (default: 8888).
 #   CLAW_JUPYTER_IP     Address JupyterLab binds to (default: 127.0.0.1).
 #   CLAW_JUPYTER_TOKEN  JupyterLab token. Required when CLAW_JUPYTER_IP is not loopback.
@@ -45,11 +47,15 @@
 #   CLAW_WEB_INTERFACE  Network interface that carries Brev's private network (default: wt0).
 #   CLAW_WEB_TOKEN      Optional access code for the workshop site. Needed only if you
 #                       set CLAW_WEB_HOST to an address that is reachable without a login.
-#   CLAW_MODEL, CLAW_FORCE_INSTALL, CLAW_SKIP_INFERENCE  Passed through to setup.sh.
+#   CLAW_FORCE_INSTALL, CLAW_SKIP_INFERENCE  Passed through to setup.sh.
+#   NEMOCLAW_DISABLE_TELEMETRY  Set to 1 to stop NemoClaw sending operation telemetry to
+#                       NVIDIA, for the install and for every command learners run
+#                       from the workshop site. The choice is saved in
+#                       ~/.claw-site-settings, so a later --web-only restart keeps it.
 
 set -euo pipefail
 
-passthrough_env="CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_INTERFACE,CLAW_WEB_TOKEN,CLAW_MODEL,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE"
+passthrough_env="CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_INTERFACE,CLAW_WEB_TOKEN,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE,NEMOCLAW_DISABLE_TELEMETRY"
 
 step() { printf '\n==> %s\n' "$1"; }
 ok() { printf '    OK: %s\n' "$1"; }
@@ -164,6 +170,8 @@ jupyter_port="${CLAW_JUPYTER_PORT:-8888}"
 jupyter_ip="${CLAW_JUPYTER_IP:-127.0.0.1}"
 jupyter_token="${CLAW_JUPYTER_TOKEN:-}"
 jupyter_log="${HOME}/claw-jupyterlab.log"
+# Settings the site must keep across restarts. Never a key.
+site_env_file="${HOME}/.claw-site-settings"
 
 start_jupyter() {
   step "Starting JupyterLab on ${jupyter_ip}:${jupyter_port}"
@@ -242,6 +250,13 @@ start_web() {
     return
   fi
 
+  # NemoClaw reads its telemetry opt-out from the environment of each command, and
+  # cells inherit the site's. Carry a choice made at launch into this start too.
+  if [[ -z "${NEMOCLAW_DISABLE_TELEMETRY:-}" && -f "${site_env_file}" ]] &&
+    grep -qx 'NEMOCLAW_DISABLE_TELEMETRY=1' "${site_env_file}"; then
+    export NEMOCLAW_DISABLE_TELEMETRY=1
+  fi
+
   # The site refuses to serve off loopback unless it is told a login is in
   # front, or given CLAW_WEB_TOKEN. It runs without the API key like JupyterLab.
   CLAW_WEB_HOST="${web_host}" CLAW_WEB_PORT="${web_port}" \
@@ -276,6 +291,11 @@ step "Installing host tools"
 for tool in curl git docker tar; do
   command -v "${tool}" >/dev/null 2>&1 || fail "${tool} is not installed on this VM."
 done
+# The NemoClaw installer uses `strings` (binutils) to verify what it downloads.
+if ! command -v strings >/dev/null 2>&1; then
+  sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y binutils </dev/null >/dev/null 2>&1 ||
+    printf '    WARNING: strings (binutils) is missing and could not be installed; setup will ask for it.\n'
+fi
 
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -334,8 +354,15 @@ ok "node $(node --version)"
 # --------------------------------------------------------------------------
 # The course's own setup: NemoClaw, the `agent` sandbox, first inference
 # --------------------------------------------------------------------------
+if [[ "${NEMOCLAW_DISABLE_TELEMETRY:-}" == "1" ]]; then
+  printf 'NEMOCLAW_DISABLE_TELEMETRY=1\n' >"${site_env_file}"
+fi
+
 if [[ -n "${NVIDIA_API_KEY:-}" ]]; then
-  ./setup.sh
+  # A failed install must not leave the instance without the site: its Setup lesson
+  # shows what went wrong and can run setup again.
+  ./setup.sh ||
+    printf '\nWARNING: setup.sh failed. The workshop site still starts; run setup again from its Setup lesson.\n' >&2
 else
   step "No NVIDIA_API_KEY supplied; leaving the NemoClaw install to the learner"
   ok "the workshop site's Setup lesson asks for a key and runs setup.sh"
@@ -350,7 +377,7 @@ step "Registering the course environment as the Jupyter python3 kernel"
 uv run --quiet python -m ipykernel install --user --name python3 --display-name "claw-training-course" >/dev/null
 ok "kernel registered"
 
-if [[ "${CLAW_START_JUPYTER:-1}" == "1" ]]; then
+if [[ "${CLAW_START_JUPYTER:-0}" == "1" ]]; then
   start_jupyter
 fi
 
@@ -363,15 +390,16 @@ cat <<EOF
 Launchable bootstrap complete.
 
   Course directory: ${course_dir}
-  First notebook:   tracks/01-concepts-architecture/01_concepts.ipynb
 
 Open the workshop site through the instance's HTTP port ${web_port} link. Brev asks you to
 sign in; the site itself asks for nothing.
 
 If no API key was supplied at launch, the site's lessons ask for one.
 
-After an instance restart, bring the services back with:
+After an instance restart, bring the site back with:
 
-  ${course_dir}/launchable/bootstrap.sh --jupyter-only
   ${course_dir}/launchable/bootstrap.sh --web-only
+
+then check the sandbox with 'nemoclaw agent status' (see "After deploying" in
+launchable/README.md).
 EOF

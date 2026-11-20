@@ -1513,3 +1513,54 @@ def test_sandbox_pipe_rejects_path_traversal(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="below /sandbox"):
         platform_mod._sandbox_pipe("content", "agent", "/sandbox/../etc/passwd")
+
+
+def _compare_skill_trees(source, dest) -> int:
+    from shared.utils.platform import _SKILL_COMPARE_SCRIPT
+
+    done = subprocess.run(
+        ["sh", "-c", _SKILL_COMPARE_SCRIPT, "course-skill-compare", str(source), str(dest)],
+        capture_output=True,
+        timeout=30,
+    )
+    return done.returncode
+
+
+def test_skill_comparison_ignores_the_origin_record_openclaw_adds(tmp_path) -> None:
+    source, dest = tmp_path / "staged", tmp_path / "installed"
+    for folder in (source, dest):
+        (folder / "scripts").mkdir(parents=True)
+        (folder / "SKILL.md").write_text("---\nname: demo\n---\nbody\n", encoding="utf-8")
+        (folder / "scripts" / "run.sh").write_text("echo hi\n", encoding="utf-8")
+
+    assert _compare_skill_trees(source, dest) == 0
+
+    # A local install leaves <skill>/.openclaw/source-origin.json behind. That is not a difference.
+    (dest / ".openclaw").mkdir()
+    (dest / ".openclaw" / "source-origin.json").write_text("{}", encoding="utf-8")
+    assert _compare_skill_trees(source, dest) == 0
+
+    # A changed or extra file in the skill itself still is.
+    (dest / "scripts" / "run.sh").write_text("echo changed\n", encoding="utf-8")
+    assert _compare_skill_trees(source, dest) == 11
+
+
+def test_skill_comparison_reports_missing_and_unsafe_destinations(tmp_path) -> None:
+    source = tmp_path / "staged"
+    source.mkdir()
+    (source / "SKILL.md").write_text("body\n", encoding="utf-8")
+
+    assert _compare_skill_trees(source, tmp_path / "absent") == 10
+
+    link = tmp_path / "link"
+    link.symlink_to(source)
+    assert _compare_skill_trees(source, link) == 20
+
+    plain_file = tmp_path / "file"
+    plain_file.write_text("not a directory\n", encoding="utf-8")
+    assert _compare_skill_trees(source, plain_file) == 21
+
+    holds_a_link = tmp_path / "holds-a-link"
+    holds_a_link.mkdir()
+    (holds_a_link / "SKILL.md").symlink_to(source / "SKILL.md")
+    assert _compare_skill_trees(source, holds_a_link) == 22

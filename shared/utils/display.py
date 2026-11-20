@@ -562,10 +562,10 @@ def create_sandbox(
 ) -> bool:
     """Create an OpenShell sandbox and wait for it to accept commands.
 
-    Current OpenShell builds support non-interactive create with ``--no-tty``.
-    The helper uses a short initial command and then polls ``openshell sandbox
-    list`` plus ``openshell sandbox exec`` so the notebook does not advance
-    until the sandbox can actually run commands.
+    The helper runs a non-interactive ``openshell sandbox create --no-tty
+    --detach`` and then polls ``openshell sandbox list`` plus ``openshell
+    sandbox exec`` so the notebook does not advance until the sandbox can
+    actually run commands.
 
     Ownership-safe collision handling:
       1. Probe ``openshell sandbox list`` for a pre-existing row matching *name*
@@ -586,10 +586,20 @@ def create_sandbox(
     intentionally loses ownership, so a later process cannot delete a sandbox
     merely because it knows the same fixed name.
 
-    On current OpenShell, sandboxes are kept by default after the initial
-    command exits. The default command is therefore ``true`` rather than a
-    long-running keepalive; that lets ``openshell sandbox create`` return while
-    leaving a Ready sandbox behind for later ``sandbox exec`` examples.
+    At OpenShell 0.0.116 the trailing command of ``sandbox create`` is the
+    sandbox's main process, and the sandbox goes to the Error phase when that
+    process exits, even with exit code 0. By default the helper therefore
+    passes no trailing command: OpenShell then starts a login shell
+    (``/bin/bash -l``) as the main process, and ``--detach`` makes the create
+    client return once the sandbox is Ready instead of attaching to that
+    shell. That leaves a Ready sandbox behind for later ``sandbox exec``
+    examples. A *command* supplied by the caller becomes the main process as
+    given, so it must keep running for as long as the sandbox is needed.
+
+    The name check here only keeps the name safe to pass on a command line.
+    The OpenShell 0.0.116 gateway is stricter: at most 19 characters, made of
+    lowercase letters, digits, and hyphens, with no leading, trailing, or
+    doubled hyphen. A name it rejects makes the create command fail.
 
     Returns True if the sandbox reached Ready within *timeout* seconds.
     """
@@ -630,8 +640,17 @@ def create_sandbox(
         )
     print(f"# no pre-existing sandbox named {name}; proceeding to create")
 
-    # 2. Create the sandbox non-interactively. OpenShell keeps the sandbox by
-    # default after the initial command exits unless --no-keep is passed.
+    # 2. Create the sandbox non-interactively, the same way web/lab.py does for
+    # the website: --detach and, by default, no trailing command. At OpenShell
+    # 0.0.116 the trailing command is the sandbox's main process and the sandbox
+    # goes to the Error phase when it exits, so the old default `-- true` would
+    # end the sandbox at once. With no trailing command OpenShell starts a login
+    # shell as the main process and keeps it running. --detach makes this create
+    # client exit 0 once the sandbox is Ready instead of attaching to that
+    # shell, which is the exit step 4 waits for before it grants ownership.
+    # --no-tty stays because nothing ever attaches to this client: the main
+    # process gets pipes instead of a terminal, which the /dev/null stdin below
+    # would select anyway.
     create_args = [
         "openshell",
         "sandbox",
@@ -643,11 +662,13 @@ def create_sandbox(
         "--label",
         f"{_SANDBOX_OWNER_LABEL}={ownership_token}",
         "--no-tty",
+        "--detach",
     ]
     if provider:
         create_args.extend(["--provider", provider])
-    sandbox_command = list(command or ["true"])
-    create_args.extend(["--", *sandbox_command])
+    if command:
+        # The caller's command replaces the login shell as the main process.
+        create_args.extend(["--", *command])
     print(f"$ {' '.join(shlex.quote(part) for part in create_args)}")
     stdout_capture = tempfile.TemporaryFile(mode="w+b")
     stderr_capture = tempfile.TemporaryFile(mode="w+b")
@@ -713,9 +734,9 @@ def create_sandbox(
         if not ssh_up:
             ready = False
 
-    # 3c. On DGX Spark, the create CLI can still be finalizing transport setup
-    # for a few seconds after the first successful exec. Require repeated
-    # successful exec probes before we consider the sandbox truly ready.
+    # 3c. A first successful exec does not always mean the exec relay has settled
+    # (first seen on DGX Spark). Require repeated successful exec probes before we
+    # consider the sandbox truly ready.
     if ready and settle_time > 0:
         settle_deadline = min(deadline, time.time() + settle_time)
         while time.time() < settle_deadline:
@@ -850,7 +871,7 @@ def delete_sandbox(name: str, *, timeout: int = 120) -> None:
     Ownership is removed only after absence is confirmed, allowing a failed
     deletion to be retried safely.
 
-    OpenShell 0.0.72 accepts sandbox names, not object IDs, for deletion. The
+    OpenShell 0.0.116 accepts sandbox names, not object IDs, for deletion. The
     process-local lifecycle lock prevents races between notebook threads, but
     the CLI cannot make the final identity check and name-only delete atomic
     against an external process. Do not recycle this name concurrently during

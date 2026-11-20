@@ -3,7 +3,7 @@
     "width": 1920,
     "height": 1080,
     "title": "NemoClaw Managed Runtime Topology",
-    "subtitle": "NemoClaw v0.0.79 + OpenShell 0.0.72 — Docker-driver deployment",
+    "subtitle": "NemoClaw v0.0.145 + OpenShell 0.0.116 — Docker-driver deployment",
     "titleAlign": "center"
   },
   "panels": [
@@ -36,7 +36,7 @@
     {
       "id": "external",
       "label": "PROVIDERS & TOOLS",
-      "subtitle": "Only allowlisted, gateway-mediated traffic leaves the host",
+      "subtitle": "Only allowlisted traffic leaves the host",
       "x": 1510,
       "y": 245,
       "w": 340,
@@ -75,8 +75,8 @@
       "h": 290,
       "items": [
         "onboard / connect",
-        "policy / shields",
-        "snapshot / rebuild"
+        "policy / inference",
+        "recover / rebuild"
       ],
       "detail": "Owns the managed compatibility unit"
     },
@@ -111,7 +111,7 @@
       "w": 200,
       "h": 335,
       "items": ["Landlock", "Seccomp", "network policy"],
-      "detail": "Managed 2026.6.10 • no provider keys"
+      "detail": "Managed 2026.10.5 • no provider keys"
     },
     {
       "id": "hermes",
@@ -125,7 +125,7 @@
       "w": 200,
       "h": 335,
       "items": ["Landlock", "Seccomp", "network policy"],
-      "detail": "Managed 0.17.0 • no provider keys"
+      "detail": "Managed 0.21.3 • no provider keys"
     },
     {
       "id": "dcode",
@@ -139,7 +139,7 @@
       "w": 200,
       "h": 355,
       "items": ["Landlock", "Seccomp", "network policy"],
-      "detail": "0.1.34 • no provider keys"
+      "detail": "0.1.87 • no provider keys"
     },
     {
       "id": "vllm",
@@ -153,13 +153,13 @@
       "w": 280,
       "h": 225,
       "items": ["DGX Spark • validated recipe"],
-      "detail": "Host-side inference.local provider"
+      "detail": "Host-side provider • vllm-local"
     },
     {
       "id": "docker-note",
       "kind": "metric",
       "value": "Docker containers",
-      "label": "Default v0.0.79 topology — no embedded K3s",
+      "label": "Default v0.0.145 topology — no embedded K3s",
       "detail": "Kubernetes is a separate experimental deployment path",
       "color": "#76B900",
       "x": 115,
@@ -226,7 +226,7 @@
       "color": "#76B900",
       "bidirectional": true,
       "label": "sandbox control",
-      "labelX": 705,
+      "labelX": 693,
       "labelY": 475
     },
     {
@@ -260,11 +260,11 @@
       "labelY": 795
     },
     {
-      "points": [[635, 815], [1465, 815], [1465, 465], [1585, 465]],
+      "points": [[1375, 465], [1585, 465]],
       "color": "#76B900",
-      "label": "credentialed cloud route",
-      "labelX": 1455,
-      "labelY": 800
+      "label": "real key swapped in at egress",
+      "labelX": 1488,
+      "labelY": 448
     },
     {
       "points": [[1375, 605], [1480, 605], [1480, 760], [1585, 760]],

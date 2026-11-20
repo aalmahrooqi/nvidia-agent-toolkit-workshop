@@ -225,7 +225,7 @@ from shared.utils.setup import setup
 setup()  # validates versions automatically
 
 # Bad: duplicates a canonical requirement without a synchronization check
-assert node_version >= "22.16.0"
+assert node_version >= "22.19.0"
 ```
 
 ### Platform-Conditional Content

@@ -24,7 +24,10 @@ exits with ``EXIT_SAFE_MODE``. The other commands only read.
 
 import argparse
 import json
+import os
+import re
 import runpy
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -234,10 +237,54 @@ def cmd_agent_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_dashboard_url(args: argparse.Namespace) -> int:
+    """Print the dashboard address, with its sign-in token when NemoClaw can supply it.
+
+    OpenClaw asks every new browser to prove itself, so a bare address is not
+    enough to get in. ``nemoclaw <sandbox> dashboard-url`` prints the address
+    with the token attached.
+    """
     from shared.utils.platform import get_dashboard_access_note, get_dashboard_access_url
 
-    print(f"Dashboard: {get_dashboard_access_url()}")
-    print(get_dashboard_access_note())
+    sandbox = os.environ.get("CLAW_SANDBOX") or "agent"
+    try:
+        reported = subprocess.run(
+            ["nemoclaw", sandbox, "dashboard-url"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except OSError:
+        # No NemoClaw on this host, so there is no token to add. Say so.
+        print(f"Dashboard: {get_dashboard_access_url()}")
+        print(get_dashboard_access_note())
+        print("This address has no sign-in token: `nemoclaw` was not found to supply one.")
+        return 0
+    except subprocess.TimeoutExpired:
+        reported = None
+
+    if reported is None or reported.returncode != 0 or not reported.stdout.strip():
+        said = ((reported.stderr or "") + (reported.stdout or "")).strip() if reported else ""
+        if said:
+            print("\n".join(said.splitlines()[-6:]), file=sys.stderr)
+        print(
+            "NemoClaw could not print the dashboard address. Another nemoclaw command, such "
+            "as an agent turn, may still be running: wait for it to finish and run this "
+            f"again. If it keeps failing, `nemoclaw {sandbox} status` shows what is down.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(reported.stdout.rstrip())
+    if reported.stderr.strip():
+        print(reported.stderr.strip())
+    port = re.search(r":(\d+)/", reported.stdout)
+    port = port.group(1) if port else "18789"
+    print(
+        "\nThe dashboard listens on this host only. To open it from another computer, "
+        "forward that port to this host first. For a Brev instance: "
+        f"brev port-forward <instance> -p {port}:{port}"
+    )
     return 0
 
 

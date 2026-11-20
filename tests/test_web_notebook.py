@@ -57,8 +57,11 @@ def _notebook_config(**overrides) -> Config:
     notebook = parse_lesson(NOTEBOOK_TEXT, "notebook")
     plain = parse_lesson(PLAIN_TEXT, "plain")
     keyed = parse_lesson("---\ntitle: Keyed\nkeys: [NVIDIA_API_KEY]\n---\nbody\n", "keyed")
+    keyless = parse_lesson(
+        "---\ntitle: Keyless\nkernel: python\nkeys: []\n---\n```python\nx = 1\n```\n", "keyless"
+    )
     settings = {
-        "lessons": (notebook, plain, keyed),
+        "lessons": (notebook, plain, keyed, keyless),
         "lab_env": {"NVIDIA_API_KEY": None, "TAVILY_API_KEY": None},
         "lab_cwd": REPO_ROOT,
         "shell_command": ("bash", "--noprofile", "--norc"),
@@ -211,10 +214,48 @@ def test_courses_load_in_order_and_reject_duplicate_slugs(tmp_path):
         raise AssertionError("duplicate lesson slugs were accepted")
 
 
+def _stack_map(body: str = "") -> str:
+    return parse_lesson(f"---\ntitle: T\n---\n```stack-map\n{body}\n```\n", "t").html
+
+
+def test_stack_map_draws_the_harness_inside_the_sandbox_beside_nemoclaw():
+    html = _stack_map()
+    for layer in ("nemoclaw", "openshell", "harness"):
+        assert f'class="sm-layer sm-{layer}"' in html
+    # The harness box holds the parts built in Course 1, and nothing is highlighted.
+    assert html.count('class="sm-part"') == 5 and "sm-now" not in html
+    labels = ("Model call", "Memory", "Tools", "Agent loop", "Guardrails", "OpenShell sandbox")
+    for label in labels:
+        assert f">{label}<" in html
+    # The model itself is outside the sandbox, so no tile inside the harness is the model.
+    assert ">LLM<" not in html and ">Model provider<" in html
+    # Both ways out of the sandbox pass a marked point on its boundary.
+    assert html.count('class="sm-gate"') == 2
+    assert "The code you wrote is the harness" in html
+
+
+def test_stack_map_can_highlight_one_layer_and_takes_a_caption():
+    html = _stack_map("layer: openshell\ncaption: Only `this` layer.")
+    assert 'class="sm-layer sm-openshell sm-now"' in html and html.count("sm-now") == 1
+    assert "<figcaption>Only <code>this</code> layer.</figcaption>" in html
+
+
+def test_stack_map_rejects_unknown_layers_and_keys():
+    for body in ("layer: kernel", "colour: green", "- a list"):
+        with pytest.raises(LessonError, match="stack-map"):
+            _stack_map(body)
+
+
 def test_front_matter_keys_must_be_known_key_names():
     lesson = parse_lesson("---\ntitle: T\nkeys: [NVIDIA_API_KEY]\n---\nbody\n", "keyed")
-    assert lesson.keys == ("NVIDIA_API_KEY",)
-    assert parse_lesson("---\ntitle: T\n---\nbody\n", "plain").keys == ()
+    assert lesson.keys == ("NVIDIA_API_KEY",) and lesson.keys_declared
+    plain = parse_lesson("---\ntitle: T\n---\nbody\n", "plain")
+    assert plain.keys == () and not plain.keys_declared
+    # A kernel gets every saved key unless the lesson says which ones it needs.
+    assert plain.kernel_sees("NVIDIA_API_KEY")
+    assert lesson.kernel_sees("NVIDIA_API_KEY") and not lesson.kernel_sees("TAVILY_API_KEY")
+    none = parse_lesson("---\ntitle: T\nkeys: []\n---\nbody\n", "none")
+    assert none.keys == () and none.keys_declared and not none.kernel_sees("NVIDIA_API_KEY")
     for bad in ("keys: NVIDIA_API_KEY", "keys: [AWS_SECRET_ACCESS_KEY]"):
         with pytest.raises(LessonError, match="front matter 'keys'"):
             parse_lesson(f"---\ntitle: T\n{bad}\n---\nbody\n", "bad")
@@ -368,6 +409,17 @@ class TestKeys(_NotebookCase):
         assert self.run_bash(length, lesson="keyed", session=OTHER_SESSION) == "len=0\n"
         # A cell that prints the key shows it redacted.
         assert self.run_bash('echo "$NVIDIA_API_KEY"', lesson="keyed") == "nvapi-[redacted]\n"
+
+    def test_a_kernel_lesson_that_lists_no_keys_is_given_none(self):
+        has_key = "import os\n'NVIDIA_API_KEY' in os.environ"
+        # One kernel is already running when the key is saved, one starts afterwards.
+        assert self.run_python(has_key, lesson="keyless")[1] == "False\n"
+        self.save(FAKE_KEY)
+        assert self.run_python(has_key, lesson="keyless")[1] == "False\n"
+        self.call("/api/kernel", {"lesson": "keyless", "session": SESSION})
+        assert self.run_python(has_key, lesson="keyless")[1] == "False\n"
+        # A lesson with no ``keys`` entry still gets it.
+        assert self.run_python(has_key)[1] == "True\n"
 
     def test_malformed_and_unknown_keys_are_rejected(self):
         rejected = self.save("not-a-key")

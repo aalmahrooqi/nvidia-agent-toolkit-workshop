@@ -257,8 +257,7 @@ def test_create_sandbox_uses_noninteractive_create_command(monkeypatch, tmp_path
         "--label",
         f"{display_utils._SANDBOX_OWNER_LABEL}={_TEST_OWNER_LABEL_VALUE}",
         "--no-tty",
-        "--",
-        "true",
+        "--detach",
     ]
     assert popen_capture["kwargs"]["cwd"] == tmp_path
     assert popen_capture["kwargs"]["stdin"] is subprocess.DEVNULL
@@ -938,12 +937,158 @@ def test_create_sandbox_preserves_signature_kwargs(monkeypatch, tmp_path: Path) 
         "--label",
         f"{display_utils._SANDBOX_OWNER_LABEL}={_TEST_OWNER_LABEL_VALUE}",
         "--no-tty",
+        "--detach",
         "--provider",
         "ollama-local",
         "--",
         "bash",
     ]
     assert popen_capture["kwargs"]["cwd"] == tmp_path
+
+
+@pytest.mark.parametrize("command", [None, [], ()])
+def test_create_sandbox_default_passes_no_main_command_that_exits(
+    monkeypatch, tmp_path: Path, command
+) -> None:
+    """OpenShell 0.0.116 ends a sandbox when its main process exits.
+
+    The old default ``-- true`` exits at once and would leave the sandbox in the
+    Error phase. With no command of its own the helper must pass none, so that
+    OpenShell's login shell is the main process, and must detach from it.
+    """
+    popen_capture: dict[str, object] = {}
+    _patch_sleep(monkeypatch)
+    _stub_ipython_display(monkeypatch, {})
+
+    class CapturingPopen(_DummyPopen):
+        def __init__(self, args, **kwargs):
+            popen_capture["args"] = args
+            super().__init__(args, **kwargs)
+
+    list_call_count = 0
+
+    def fake_run(args, **kwargs):  # noqa: ARG001
+        nonlocal list_call_count
+        if args[:3] == ["openshell", "sandbox", "list"]:
+            if args[-2:] == ["-o", "json"]:
+                return subprocess.CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=_sandbox_json("cli-demo"),
+                    stderr="",
+                )
+            list_call_count += 1
+            stdout = "NAME      CREATED              PHASE\n"
+            if list_call_count > 1:
+                stdout += "cli-demo  2026-11-20 10:15:00  Ready\n"
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("shared.utils.display.subprocess.Popen", CapturingPopen)
+    monkeypatch.setattr("shared.utils.display.subprocess.run", fake_run)
+
+    ready = create_sandbox(
+        "cli-demo",
+        policy="policies/openshell-baseline.policy.yaml",
+        command=command,
+        cwd=tmp_path,
+        settle_time=0,
+    )
+
+    assert ready is True
+    create_args = popen_capture["args"]
+    assert "--detach" in create_args
+    assert "--" not in create_args
+    assert "true" not in create_args
+
+
+# `openshell sandbox list` as the 0.0.116 CLI prints it: bold headers and a
+# coloured phase cell, even when its output is piped.
+_BOLD_TITLES = [f"\x1b[1m{title}\x1b[0m" for title in ("NAME", "CREATED", "PHASE")]
+_COLOURED_LIST_HEADER = "      ".join(_BOLD_TITLES) + "\n"
+_COLOURED_PROVISIONING = "\x1b[33mProvisioning\x1b[39m"
+_COLOURED_READY = "\x1b[32mReady\x1b[39m"
+
+
+def test_create_sandbox_reads_ready_phase_from_coloured_cli_table(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A coloured Ready cell counts as Ready; a coloured Provisioning cell does not."""
+    _patch_sleep(monkeypatch)
+    _stub_ipython_display(monkeypatch, {})
+    table_reads = 0
+    exec_probes_at_table_read: list[int] = []
+    exec_probes = 0
+
+    def fake_run(args, **kwargs):  # noqa: ARG001
+        nonlocal table_reads, exec_probes
+        if args[:3] == ["openshell", "sandbox", "list"]:
+            if args[-2:] == ["-o", "json"]:
+                return subprocess.CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=_sandbox_json("cli-demo"),
+                    stderr="",
+                )
+            table_reads += 1
+            exec_probes_at_table_read.append(exec_probes)
+            stdout = _COLOURED_LIST_HEADER
+            if table_reads == 2:
+                stdout += f"cli-demo  2026-11-20 10:15:00  {_COLOURED_PROVISIONING}\n"
+            elif table_reads > 2:
+                stdout += f"cli-demo  2026-11-20 10:15:00  {_COLOURED_READY}\n"
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
+        if args[:3] == ["openshell", "sandbox", "exec"]:
+            exec_probes += 1
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="ok\n", stderr="")
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr("shared.utils.display.subprocess.Popen", _DummyPopen)
+    monkeypatch.setattr("shared.utils.display.subprocess.run", fake_run)
+
+    ready = create_sandbox(
+        "cli-demo",
+        policy="policies/openshell-baseline.policy.yaml",
+        cwd=tmp_path,
+        settle_time=0,
+    )
+
+    assert ready is True
+    # One collision check, one Provisioning poll, one Ready poll. No exec probe
+    # ran until the Ready row had been read.
+    assert table_reads == 3
+    assert exec_probes_at_table_read == [0, 0, 0]
+    assert exec_probes == 1
+    assert "cli-demo" in display_utils._OWNED_SANDBOXES
+
+
+def test_create_sandbox_refuses_collision_in_coloured_cli_table(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The name column is still matched when the row carries colour codes."""
+    popen_called = False
+    _stub_ipython_display(monkeypatch, {})
+
+    def fake_run(args, **kwargs):  # noqa: ARG001
+        stdout = _COLOURED_LIST_HEADER + f"cli-demo  2026-11-20 10:15:00  {_COLOURED_READY}\n"
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
+
+    def fake_popen(*args, **kwargs):  # noqa: ARG001
+        nonlocal popen_called
+        popen_called = True
+        return _DummyPopen(*args, **kwargs)
+
+    monkeypatch.setattr("shared.utils.display.subprocess.run", fake_run)
+    monkeypatch.setattr("shared.utils.display.subprocess.Popen", fake_popen)
+
+    with pytest.raises(RuntimeError, match="Refusing to delete or replace"):
+        create_sandbox(
+            "cli-demo",
+            policy="policies/openshell-baseline.policy.yaml",
+            cwd=tmp_path,
+        )
+
+    assert popen_called is False
 
 
 def test_create_sandbox_name_token_match_not_substring(monkeypatch, tmp_path: Path) -> None:

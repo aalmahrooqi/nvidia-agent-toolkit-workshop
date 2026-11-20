@@ -286,7 +286,7 @@ def _incremental_update_args(
     *,
     timeout: int,
 ) -> tuple[list[str], tuple[str, int]] | None:
-    """Translate the lossless subset supported by OpenShell 0.0.72 update flags."""
+    """Translate the lossless subset supported by OpenShell 0.0.116 update flags."""
     if set(entry) - _UPDATE_ENTRY_KEYS:
         return None
     endpoints = entry.get("endpoints")
@@ -454,7 +454,7 @@ _NONE_DEFAULT_KEYS = {
 
 
 def _is_omitted_policy_default(key: object, value: object) -> bool:
-    """Match only defaults omitted by OpenShell 0.0.72's network-policy schema."""
+    """Match only defaults omitted by OpenShell 0.0.116's network-policy schema."""
     if not isinstance(key, str):
         return False
     if key in _EMPTY_STRING_DEFAULT_KEYS:

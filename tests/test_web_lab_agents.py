@@ -26,12 +26,12 @@ from web.lessons import parse_lesson
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LESSON_FILES = {
-    "nasa-apod": REPO_ROOT / "web" / "courses" / "02_claw" / "06_nasa_apod.md",
+    "nasa-apod": REPO_ROOT / "web" / "courses" / "02_claw" / "07_nasa_apod.md",
     "daily-financial-briefing": REPO_ROOT
     / "web"
     / "courses"
     / "02_claw"
-    / "07_daily_financial_briefing.md",
+    / "08_daily_financial_briefing.md",
 }
 AGENT_COMMANDS = {
     "agent-create": lab_agents.cmd_agent_create,
@@ -143,6 +143,58 @@ def test_other_command_arguments(subcommands):
     grader = parser.parse_args(["check-apod-validator", "apod_validator.py"])
     assert (grader.func, grader.file) == (lab_agents.cmd_check_apod_validator, "apod_validator.py")
     assert parser.parse_args(["dashboard-url"]).func is lab_agents.cmd_dashboard_url
+
+
+def test_dashboard_url_comes_from_nemoclaw_and_falls_back(monkeypatch, capsys):
+    asked = []
+
+    def nemoclaw(command, **kwargs):
+        asked.append(command)
+        return subprocess.CompletedProcess(
+            command, 0, stdout="Dashboard: http://127.0.0.1:18789/#token=stand-in\n", stderr=""
+        )
+
+    monkeypatch.setenv("CLAW_SANDBOX", "agent")
+    monkeypatch.setattr(lab_agents.subprocess, "run", nemoclaw)
+
+    assert lab_agents.cmd_dashboard_url(None) == 0
+    shown = capsys.readouterr().out
+    assert asked == [["nemoclaw", "agent", "dashboard-url"]]
+    # The address NemoClaw reports carries the sign-in token a new browser needs.
+    assert "#token=stand-in" in shown and "brev port-forward <instance> -p 18789:18789" in shown
+
+    # NemoClaw may have put the dashboard on another port; the forwarding hint follows it.
+    def other_port(command, **kwargs):
+        text = "  Dashboard URL:\n  http://127.0.0.1:18791/#token=stand-in\n"
+        return subprocess.CompletedProcess(command, 0, stdout=text, stderr="Treat it as a secret.")
+
+    monkeypatch.setattr(lab_agents.subprocess, "run", other_port)
+    assert lab_agents.cmd_dashboard_url(None) == 0
+    shown = capsys.readouterr().out
+    assert "-p 18791:18791" in shown and "Treat it as a secret." in shown
+
+    # NemoClaw ran but could not give the address: say why, and do not hand out an
+    # address without a token as if it would work.
+    def refused(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command, 1, stdout="", stderr="Failed to acquire lock after 120 retries"
+        )
+
+    monkeypatch.setattr(lab_agents.subprocess, "run", refused)
+    assert lab_agents.cmd_dashboard_url(None) == 1
+    said = capsys.readouterr()
+    assert "Failed to acquire lock" in said.err and "run this again" in said.err
+    assert "Dashboard:" not in said.out
+
+    # Without nemoclaw at all the helper still says where the dashboard is, and that
+    # the address has no token.
+    def missing(command, **kwargs):
+        raise FileNotFoundError(command[0])
+
+    monkeypatch.setattr(lab_agents.subprocess, "run", missing)
+    assert lab_agents.cmd_dashboard_url(None) == 0
+    shown = capsys.readouterr().out
+    assert "Dashboard: http://127.0.0.1:" in shown and "no sign-in token" in shown
 
 
 def test_commands_are_registered_on_the_claw_parser():

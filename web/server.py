@@ -92,7 +92,10 @@ class Config:
     courses_dir: Path | None = None
     lab_cwd: Path = REPO_ROOT
     token: str = ""
-    check_timeout: float = 25.0
+    # Long enough for a check that asks NemoClaw to send a real model request.
+    # Keep web.lab.INFERENCE_CHECK_TIMEOUT below this, so that helper can report a
+    # slow model in its own words before the check is stopped.
+    check_timeout: float = 90.0
     run_timeout: float = 1800.0
     max_runs: int = 8
     max_code_bytes: int = 65536
@@ -367,7 +370,8 @@ class _ApiHandler(_PageHandler):
         return lesson
 
     async def kernel_for(self, session: str, lesson: Lesson) -> Kernel:
-        keys = self.settings["session_keys"].get(session, {})
+        saved = self.settings["session_keys"].get(session, {})
+        keys = {name: value for name, value in saved.items() if lesson.kernel_sees(name)}
         try:
             return await self.settings["kernels"].get(session, lesson.slug, keys)
         except RuntimeError as exc:
@@ -567,7 +571,8 @@ class KeysHandler(_ApiHandler):
     A key is never written to disk, logged, or sent back. It is handed to that
     session's Python kernels as an environment variable, because the learner's
     own code is what calls the model, and to bash cells only on lessons that
-    ask for it by name.
+    ask for it by name. A lesson whose front matter has a ``keys`` entry limits
+    its kernel to those keys too, so ``keys: []`` keeps every key out.
     """
 
     def get(self) -> None:
@@ -591,8 +596,11 @@ class KeysHandler(_ApiHandler):
 
         value = value.strip()
         self.settings["session_keys"].setdefault(session, {})[name] = value
-        for kernel in self.settings["kernels"].for_session(session):
-            await kernel.set_env({name: value})
+        config: Config = self.settings["config"]
+        for slug, kernel in self.settings["kernels"].for_session(session).items():
+            lesson = config.lesson(slug)
+            if lesson is not None and lesson.kernel_sees(name):
+                await kernel.set_env({name: value})
         self.write({"saved": True})
 
 

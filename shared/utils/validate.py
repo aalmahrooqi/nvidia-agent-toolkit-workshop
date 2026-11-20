@@ -25,7 +25,12 @@ from .platform import (
 )
 
 DGX_VLLM_CONTAINER = "nemoclaw-vllm"
-DGX_VLLM_IMAGE = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+# NemoClaw v0.0.145 pins managed vLLM images by digest, not by tag. This is the
+# DGX Spark default recipe's image and must stay equal to
+# managed_inference_profiles.dgx_spark.runtime_image in versions.yaml.
+DGX_VLLM_IMAGE = (
+    "nvcr.io/nvidia/vllm@sha256:9204569b17ee4c0eff75194b8e6e458479c8aee18953b5ab9cf359fcdac659e2"
+)
 DGX_VLLM_MODEL = "nvidia/Qwen3.6-35B-A3B-NVFP4"
 
 
@@ -222,7 +227,7 @@ def _extract_version_from_output(stdout: str) -> str | None:
     import re
 
     stripped = stdout.strip()
-    # Handles "nemoclaw v0.0.79", "openshell 0.0.72", "ollama version is 0.31.2",
+    # Handles "nemoclaw v0.0.145", "openshell 0.0.116", "ollama version is 0.40.16",
     # "Docker version 28.0.0, build ...".
     match = re.search(r"(\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9.]+)?)", stripped)
     return match.group(1) if match else None
@@ -365,6 +370,10 @@ def _check_managed_vllm_container() -> tuple[str, str, str]:
                 "FAIL",
                 f"{DGX_VLLM_CONTAINER} is not running; inspect docker logs",
             )
+        # NemoClaw passes the digest reference itself to `docker run`, and that
+        # reference is what .Config.Image reports, so the whole string must
+        # match. A container started from a tag, even one that resolves to the
+        # same digest, was not started by this NemoClaw release and fails.
         if image != DGX_VLLM_IMAGE:
             return (
                 "Managed vLLM container",
@@ -426,7 +435,7 @@ def _check_provider_configured(name: str) -> tuple[str, str, str]:
 
 
 def _check_managed_vllm_route() -> tuple[str, str, str]:
-    """Check that the shared gateway route matches the managed Spark profile."""
+    """Check that this workspace's inference route matches the managed Spark profile."""
     try:
         result = subprocess.run(
             ["openshell", "inference", "get"],
@@ -544,7 +553,7 @@ def _build_checks(platform: str, stage: str) -> list[tuple[str, callable]]:
     # A non-null local override is still honored for a controlled delivery target.
     docker_min = versions.get("runtime", {}).get("docker", {}).get("min")
 
-    node_min = versions.get("runtime", {}).get("node", {}).get("min", "22.16")
+    node_min = versions.get("runtime", {}).get("node", {}).get("min", "22.19")
 
     # --- Prerequisites (all platforms) ---
     if stage_level >= 0:
@@ -638,9 +647,9 @@ def _build_checks(platform: str, stage: str) -> list[tuple[str, callable]]:
     if stage_level >= 3:
         checks.append(
             (
-                "Inference route configured",
+                "Inference status readable",
                 lambda: _check_command(
-                    "Inference route configured", ["openshell", "inference", "get"]
+                    "Inference status readable", ["openshell", "inference", "get"]
                 ),
             )
         )

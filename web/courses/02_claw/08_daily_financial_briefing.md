@@ -44,8 +44,8 @@ the SKILL.md.
 
 | API | What it provides | Auth | Endpoint |
 |-----|-----------------|------|----------|
-| **CoinGecko** | Bitcoin, Ethereum prices + 24hr change | None | `api.coingecko.com` |
-| **Frankfurter** | USD→EUR, GBP, JPY exchange rates | None | `api.frankfurter.dev` |
+| **CoinGecko** | Bitcoin, Ethereum, Solana prices + 24hr change | None | `api.coingecko.com` |
+| **Frankfurter** | USD→EUR, GBP, JPY, CNY exchange rates | None | `api.frankfurter.dev` |
 | **Hacker News** | Top 5 tech stories | None | `hacker-news.firebaseio.com` |
 | **Open-Meteo** | Weather for a configurable city | None | `api.open-meteo.com` |
 | **Nager.Date** | Upcoming US public holidays | None | `date.nager.at` |
@@ -118,13 +118,14 @@ cat "$CLAW_COURSE_DIR/tracks/04-integrations/skills/daily-briefing/SKILL.md"
 
 ## 4. Add Network Policies for All 5 APIs
 
-OpenShell [sandboxes](https://docs.nvidia.com/openshell/sandboxes/manage-sandboxes) deny all outbound network traffic by default. Each API
+OpenShell [sandboxes](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes) deny all outbound network traffic by default. Each API
 the agent calls needs an explicit
-[network policy](https://docs.nvidia.com/openshell/reference/policy-schema) entry that
+[network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) entry that
 specifies the host, port, protocol, and which binaries may initiate the connection.
-The course adds one entry per API — `enforcement: enforce` blocks requests to unlisted
-hosts, and `access: read-only` restricts the agent to GET requests.
-See the full [policy customization guide](https://docs.nvidia.com/openshell/sandboxes/policies)
+The course adds one entry per API — `enforcement: enforce` blocks requests the entry does
+not allow instead of only logging them, and `access: read-only` limits the agent to `GET`,
+`HEAD`, and `OPTIONS` requests.
+See the full [policy customization guide](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/policies)
 for additional options.
 
 All five entries have this shape. The other four are `frankfurter`, `hackernews`,
@@ -172,7 +173,7 @@ success: Every required API rule matches before any live probe.
 
 ## 5. Test Each API from Inside the Sandbox
 
-Before deploying the [skill](https://docs.openclaw.ai/tools/creating-skills), verify each API is reachable through the [network policy](https://docs.nvidia.com/openshell/reference/policy-schema).
+Before deploying the [skill](https://docs.openclaw.ai/tools/creating-skills), verify each API is reachable through the [network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema).
 This is the raw data the agent will synthesize into a briefing. Each probe pipes its
 response through `claw validate-json`, which prints the JSON and accepts it only when the
 whole shape is usable. Run these only once the policy check above passes; in safe mode a
@@ -229,7 +230,7 @@ success: Five live sources, each validated before the agent ever sees them.
 
 ## 6. Deploy the Skill to the Market Brief Agent
 
-OpenClaw 2026.6.10 installs local directories for an exact agent with its native CLI:
+OpenClaw installs local directories for an exact agent with its native CLI:
 
 ```text
 openshell sandbox exec -n agent --no-tty -- \
@@ -251,6 +252,8 @@ an identical existing skill was preserved, and the command ends with `SKILL_SCOP
 The skill is scoped to the financial-analyst workspace, so the deployment does not alter
 unrelated agent personas. A `SAFE SKIP` or `SAFE MODE` line means no live deployment is
 claimed.
+
+If the deploy step reports an unknown agent id, the running gateway has not loaded the new agent yet: run `nemoclaw "$CLAW_SANDBOX" gateway restart` in a cell and rerun it.
 
 ```check
 task: The canonical `daily-briefing` skill is installed in the `financial-analyst` agent's workspace and visible to its model.
@@ -294,15 +297,24 @@ differentiator — and it's just a Markdown file you can edit.
 
 ## 8. Scheduling the Briefing
 
-OpenClaw 2026.6.10 accepts the cron expression and message as positional arguments. Run the supported CLI inside the exact sandbox, select the exact agent, isolate each scheduled transcript, and disable fallback delivery until an operator configures a destination:
+OpenClaw accepts the cron expression and message as positional arguments, and every job needs a name. Run the supported CLI inside the exact sandbox, name the job, select the exact agent, isolate each scheduled transcript, and disable fallback delivery until an operator configures a destination:
 
 ```text
 openshell sandbox exec -n agent --no-tty -- \
-  openclaw cron create --agent financial-analyst --session isolated --no-deliver \
-  '30 7 * * 1-5' 'Prepare the weekday morning briefing'
+  openclaw cron create '30 7 * * 1-5' 'Prepare the weekday morning briefing' \
+  --name weekday-briefing --agent financial-analyst --session isolated --no-deliver
 ```
 
-The expression means 07:30 every Monday through Friday in the gateway's configured timezone. This creates a persistent job that runs the agent on every one of those mornings, so it is shown here for you to copy deliberately, not as a one-click block. Review the created job with `openclaw cron list` before enabling any external delivery path:
+The expression means 07:30 every Monday through Friday on the clock of the machine the gateway runs on. That gateway runs inside the sandbox, so expect the sandbox's timezone (normally UTC), not your workstation's; add `--tz` with an IANA name such as `--tz America/Los_Angeles` to pin it. This creates a persistent job that runs the agent on every one of those mornings, so it is shown here for you to copy deliberately, not as a one-click block. OpenClaw also calls this command group `openclaw automations`; `cron` works as written.
+
+Creating a job needs the `operator.admin` gateway scope, and NemoClaw [never approves that scope automatically](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/security/security-controls/gateway-authentication-controls#approve-administrative-scopes-manually), so expect the first attempt to fail with `scope upgrade pending approval` and a `requestId`. If the command succeeds outright, the job exists and no approval is needed. Approve it yourself from a terminal on this host. Open the sandbox shell with `nemoclaw <sandbox> connect`, using the name the first cell of this lesson printed (`agent` unless you changed it), run the `openclaw cron create ...` part of the command above there once, and note the `requestId` in the failure. Then list the pending requests, check that the entry with that `requestId` shows the client, device, and scopes you expect, and approve only that request:
+
+```text
+openclaw devices list --json
+openclaw devices approve <requestId>
+```
+
+Run the `openclaw cron create ...` command again after the approval succeeds. Review the created job with `openclaw cron list` before enabling any external delivery path; an empty list prints `No automations.`:
 
 ```bash
 openshell sandbox exec -n "$CLAW_SANDBOX" --no-tty -- openclaw cron list
@@ -315,16 +327,21 @@ openshell sandbox exec -n "$CLAW_SANDBOX" --no-tty -- openclaw cron list
 Target the exact Market Brief agent, and only once the agent, policy, and skill checks above have passed:
 
 ```bash
-openshell sandbox exec -n "$CLAW_SANDBOX" --no-tty -- openclaw agent --agent financial-analyst --message "Give me today's morning briefing"
+nemoclaw "$CLAW_SANDBOX" agent --agent financial-analyst \
+  -m "Give me today's morning briefing"
 ```
 
-If you need a clean transcript, reset the exact session through the host-side NemoClaw lifecycle command; do not send `/new` as if it were an ordinary agent prompt. Replace `<session-key>` with the exact key shown in Sessions:
+The reply appears when the turn has finished. If this reports an unknown agent id even though the agent check passed, the running gateway has not loaded the new agent yet: run `nemoclaw "$CLAW_SANDBOX" gateway restart` and send the prompt again. If the cell errors because the gateway is down, check it with `openshell sandbox exec -n "$CLAW_SANDBOX" -- openclaw gateway health`. If it reports `pairing required` or `scope upgrade pending approval`, wait a few seconds and run it again.
+
+Each run with `--agent financial-analyst` continues the same session; nothing resets it automatically. If you need a clean transcript, reset the agent's main session through the host-side NemoClaw lifecycle command; do not send `/new` as if it were an ordinary agent prompt:
 
 ```text
-nemoclaw agent sessions reset '<session-key>' --agent financial-analyst
+nemoclaw <sandbox> sessions reset agent:financial-analyst:main
 ```
 
-Print the dashboard URL and open it. On DGX Spark, use the tokenized root URL over the workstation SSH tunnel, then inspect the Market Brief entry in the Dashboard **Sessions** view.
+If the reset stops with `scope upgrade pending approval`, approve it the way section 8 describes for scheduling a job.
+
+Wait for the reply above, then print the dashboard address. It carries a sign-in token, so treat it like a password. The dashboard listens on the host the sandbox runs on; to open it from another computer, forward its port first, as the output explains. Then inspect the Market Brief entry in the Dashboard **Sessions** view.
 
 ```bash
 claw dashboard-url
@@ -351,7 +368,7 @@ This pattern scales to any domain:
 | **Research digest** | arXiv, Semantic Scholar, HN | "Academic summarizer" |
 | **Customer prep** | Salesforce, LinkedIn, news | "Customer success analyst" |
 
-The [skill](https://docs.openclaw.ai/tools/creating-skills) provides the data sources. The [SOUL.md](https://docs.openclaw.ai/concepts/soul) provides the lens. The [network policy](https://docs.nvidia.com/openshell/reference/policy-schema)
+The [skill](https://docs.openclaw.ai/tools/creating-skills) provides the data sources. The [SOUL.md](https://docs.openclaw.ai/concepts/soul) provides the lens. The [network policy](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema)
 controls what the agent reaches. All three pieces are visible, auditable, and
 version-controllable.
 
@@ -410,9 +427,10 @@ To go further, the full `claw-training-assets` course adds the Hermes and Deep A
 [Cron Scheduling](https://docs.openclaw.ai/automation/cron-jobs)
 
 **OpenShell Docs:**
-[Network Policy Schema](https://docs.nvidia.com/openshell/reference/policy-schema) ·
-[Policy Customization](https://docs.nvidia.com/openshell/sandboxes/policies) ·
-[Security Best Practices](https://docs.nvidia.com/openshell/security/best-practices)
+[Network Policy Schema](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) ·
+[Policy Customization](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/policies) ·
+[Security Best Practices](https://docs.nvidia.com/openshell/v0.0.116/security/best-practices)
 
 **NemoClaw Docs:**
-[CLI Command Reference](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/reference/commands)
+[CLI Command Reference](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/reference/commands) ·
+[Gateway and Secret Controls](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/security/security-controls/gateway-authentication-controls)

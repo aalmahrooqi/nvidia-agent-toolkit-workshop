@@ -21,9 +21,9 @@ def _stub_minimal_setup(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _stub_openshell_setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _stub_minimal_setup(monkeypatch)
-    monkeypatch.setattr(setup_mod, "get_openshell_version", lambda: "0.0.72")
+    monkeypatch.setattr(setup_mod, "get_openshell_version", lambda: "0.0.116")
     monkeypatch.setattr(setup_mod, "get_openshell_sandboxes", lambda: "agent Ready")
-    monkeypatch.setattr(setup_mod, "get_nemoclaw_version", lambda: "0.0.79")
+    monkeypatch.setattr(setup_mod, "get_nemoclaw_version", lambda: "0.0.145")
     monkeypatch.setattr(setup_mod, "is_nemoclaw_registry_valid", lambda: True)
 
 

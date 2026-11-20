@@ -1,6 +1,6 @@
 ---
 title: NemoClaw with OpenClaw
-subtitle: "One managed deployment, three control planes: lifecycle, runtime, and agent harness"
+subtitle: "One managed deployment, three layers: lifecycle, runtime, and agent harness"
 minutes: 45
 ---
 
@@ -15,7 +15,7 @@ edit a cell before running it. `$CLAW_SANDBOX` already holds the name of the cou
 
 | Layer | Owns |
 |---|---|
-| **NemoClaw** | The host CLI and blueprint orchestration |
+| **NemoClaw** | The host CLI that installs, configures, and repairs the other two |
 | **OpenShell** | Sandboxing, policy, port forwarding, and inference routing |
 | **OpenClaw** | The agent harness |
 
@@ -27,9 +27,9 @@ general-purpose, always-on assistant. Four ideas are enough to follow the rest o
 | [SOUL.md](https://docs.openclaw.ai/concepts/soul) | A Markdown file that defines an agent's personality |
 | [SKILL.md](https://docs.openclaw.ai/tools/creating-skills) | A Markdown file that defines a capability an agent can use |
 | [Workspace](https://docs.openclaw.ai/concepts/agent-workspace) | Per-agent files for identity, user context, persistent notes, and local skills |
-| [Gateway](https://docs.openclaw.ai/gateway/index) | The OpenClaw service that answers health probes and serves sessions |
+| [Gateway](https://docs.openclaw.ai/gateway) | The OpenClaw service that answers health probes and serves sessions |
 
-## 1. Compare the three control planes
+## 1. Compare the three layers
 
 Use this pattern when debugging. Each command family answers a different question:
 
@@ -42,7 +42,14 @@ Use this pattern when debugging. Each command family answers a different questio
 Ask NemoClaw what it deployed:
 
 ```bash
-nemoclaw status || nemoclaw agent status
+nemoclaw status
+```
+
+Ask it which harnesses it can install. These are the three from
+[the first lesson](/learn/agent-harness); this sandbox runs the default, OpenClaw.
+
+```bash
+nemoclaw agents list
 ```
 
 Ask OpenShell which sandboxes exist:
@@ -54,7 +61,7 @@ openshell sandbox list
 ```check
 task: The course sandbox is listed by OpenShell and is Ready.
 command: openshell sandbox list | awk -v name="$CLAW_SANDBOX" 'NR > 1 && $1 == name' | grep -q Ready
-hint: Look at the Phase column of `openshell sandbox list`. If the sandbox is missing, run `claw setup --force`.
+hint: "Look at the Phase column of `openshell sandbox list`. If the sandbox is missing, go back to [Set Up Your Environment](/learn/setup), change its cell to `claw setup --force`, and run it there."
 success: OpenShell reports the course sandbox as Ready.
 ```
 
@@ -112,11 +119,12 @@ This is a read-only inspection. The goal is to confirm that the harness sees a s
 surface, not to change the environment.
 
 ```bash
-openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 20 -- sh -lc 'openclaw skills list | sed -n 1,60p'
+openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 20 -- sh -lc 'openclaw skills list --agent main | sed -n 1,60p'
 ```
 
 The count varies as OpenClaw releases change. What matters is a readable list rather than
-a shell error.
+a shell error. `--agent main` names whose skills to list: once a sandbox holds more than one
+agent, as yours will after the next lesson, OpenClaw no longer guesses.
 
 ## 6. Inspect gateway health and sessions
 
@@ -130,8 +138,12 @@ openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 30 -- sh -lc 'openclaw gatew
 ## 7. Read the active policy
 
 This is the policy OpenShell is enforcing now on the managed sandbox. It has the same four
-domains you wrote by hand in the Sandbox Policies notebook, expanded from the NemoClaw policy
-tier chosen at onboarding.
+sections you wrote by hand in [Sandbox Policies](/learn/sandbox-policies):
+`filesystem_policy`, `landlock`, `process`, and `network_policies`, filled in from the
+NemoClaw policy tier chosen at onboarding. It is broader than your lab policy. NemoClaw's
+policy for OpenClaw sets `include_workdir: true`, because OpenClaw keeps its state under
+`/sandbox`, and it still carries a `managed_inference` entry for `inference.local`, which
+this sandbox does not use to reach NVIDIA's hosted models.
 
 ```bash
 openshell policy get "$CLAW_SANDBOX" --full
@@ -149,68 +161,92 @@ success: You can read the live policy that OpenShell is enforcing.
 
 ## 8. Probe the inference route
 
-The request below runs inside the sandbox and carries OpenShell's credential placeholder,
-not a key. The privacy router swaps in the real credential outside the sandbox.
+When NemoClaw created this sandbox it attached an NVIDIA **provider** to it. Ask which model
+route the sandbox uses:
 
 ```bash
-openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 30 -- sh -lc 'curl -sS -o /dev/null -w "HTTP_STATUS=%{http_code}\n" https://inference.local/v1/models -H "Authorization: Bearer openshell:resolve:env:NVIDIA_API_KEY"'
+nemoclaw "$CLAW_SANDBOX" inference get
 ```
 
-Now look at what the sandbox itself holds in that variable:
+NemoClaw calls this provider `nvidia-prod`. The OpenShell provider it attached to the
+sandbox, which you saw in `openshell provider list`, is `nemoclaw-nvidia-prod-v1`. They are
+the same connection seen from two layers.
+
+The endpoint is NVIDIA's own API address. The agent calls it directly, and OpenShell deals
+with the credential as the request leaves the sandbox. Look at what the sandbox itself holds
+for that credential:
 
 ```bash
-openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 10 -- sh -c 'echo "KEY=${NVIDIA_API_KEY:-}"'
+openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 10 -- sh -c 'echo "KEY=${NVIDIA_INFERENCE_API_KEY:-}"'
 ```
 
-Expect a placeholder such as `openshell:resolve:env:NVIDIA_API_KEY`, or nothing at all. A
-value starting with `nvapi-` would mean the real key leaked into the sandbox.
+Expect a placeholder such as `openshell:resolve:env:v3_NVIDIA_INFERENCE_API_KEY` (the `v3_`
+part varies). A value starting with `nvapi-` would mean the real key leaked into the
+sandbox. An empty value means the provider is not attached yet: wait a few seconds and run
+the cell again.
+
+Now confirm that a placeholder is enough. This asks NemoClaw to send one real model request
+from inside the sandbox, the way the agent does, and to report whether a model answered:
+
+```bash
+claw inference-check
+```
 
 ```check
-task: The sandbox reaches its model route, and no real API key is visible inside it.
+task: The sandbox reaches its model, and no real API key is visible inside it.
 command: |
-  status=$(openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 30 -- sh -lc 'curl -sS -o /dev/null -w "%{http_code}" https://inference.local/v1/models -H "Authorization: Bearer openshell:resolve:env:NVIDIA_API_KEY"')
-  seen=$(openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 10 -- sh -c 'echo "KEY=${NVIDIA_API_KEY:-}"') || exit 1
-  echo "HTTP_STATUS=$status"
-  case "$seen" in *KEY=nvapi-*) echo "A real key is visible inside the sandbox."; exit 1 ;; esac
-  [ "$status" = 200 ]
-hint: The first probe should print `HTTP_STATUS=200`. If it does not, check `openshell inference get` and `openshell provider list`.
-success: Inference works through the protected route and the sandbox never holds the real key.
+  seen=$(openshell sandbox exec -n "$CLAW_SANDBOX" --timeout 10 -- sh -c 'echo "KEY=${NVIDIA_INFERENCE_API_KEY:-}${NVIDIA_API_KEY:-}"') || exit 1
+  case "$seen" in *nvapi-*) echo "A real key is visible inside the sandbox."; exit 1 ;; esac
+  claw inference-check
+hint: "Run `claw inference-check`. If it says busy, another nemoclaw cell is still running: wait for it and check again. If it reports a failure, `nemoclaw \"$CLAW_SANDBOX\" status` shows which part of the sandbox is unhealthy."
+success: A model answers through the sandbox's own route, and the sandbox never holds the real key.
 ```
 
 ## 9. Talk to the agent
 
-Send the agent one message and read its reply. `openclaw agent` runs a single turn and
-exits, so it works in a cell. `main` is the agent every NemoClaw sandbox starts with.
+Send the agent one message and read its reply. `nemoclaw <sandbox> agent` runs a single
+OpenClaw turn inside the sandbox and exits, so it works in a cell. `main` is the agent every
+NemoClaw sandbox starts with.
 
 ```bash
-openshell sandbox exec -n "$CLAW_SANDBOX" --no-tty -- \
-  openclaw agent --agent main \
-  --message "Explain in one sentence where your provider credential is stored."
+nemoclaw "$CLAW_SANDBOX" agent --agent main \
+  -m "Explain in one sentence where your provider credential is stored."
 ```
 
+The reply appears when the turn has finished, which can take a little while. If the cell
+reports `pairing required` or `scope upgrade pending approval` instead, wait a few seconds
+and run it again: the sandbox approves its own first connection shortly after it starts.
+
 Compare the answer with what you just measured. The model's explanation is not the proof;
-the placeholder and the successful routed request are.
+the placeholder and the successful model request are.
 
 Edit the message and run the cell again to ask something else. Each run continues the same
-conversation with the `main` agent.
+conversation with the `main` agent. That is the session idea from
+[the first lesson](/learn/agent-harness), kept on disk by a full-size harness.
 
 > For a back-and-forth chat, NemoClaw also has an interactive terminal UI. From a terminal
-> on this host, `nemoclaw "$CLAW_SANDBOX" connect` puts you inside the sandbox and
-> `openclaw tui` starts it. It needs a real terminal, so it is not part of this page.
+> on this host, `nemoclaw agent connect` puts you inside the sandbox (`agent` is the
+> sandbox's name) and `openclaw tui` starts it. It needs a real terminal, so it is not part
+> of this page.
 
 ## What you accomplished
 
-- Verified the default NemoClaw blueprint as three cooperating layers: NemoClaw lifecycle, OpenShell runtime, and OpenClaw harness
+- Verified the default NemoClaw deployment as three cooperating layers: NemoClaw lifecycle, OpenShell runtime, and OpenClaw harness
 - Confirmed OpenClaw runs inside the sandbox with its state under `/sandbox/.openclaw`
 - Inspected the workspace, skills, and session surfaces without changing the environment
 - Read the live OpenShell policy on the managed sandbox
-- Proved inference works through the protected route while the sandbox holds only a placeholder
+- Proved a model answers through the sandbox's own route while the sandbox holds only a placeholder
 - Sent the agent a message from the same page
+
+## Next Steps
+
+Continue to **[NASA APOD: Your First API-backed Skill](/learn/nasa-apod)** -- you'll give the
+agent a skill and the one network rule it needs.
 
 **Sources:**
 [NemoClaw commands](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/reference/commands) ·
 [NemoClaw security best practices](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/security/best-practices) ·
-[OpenShell sandboxes](https://docs.nvidia.com/openshell/sandboxes/manage-sandboxes) ·
-[OpenShell policy schema](https://docs.nvidia.com/openshell/reference/policy-schema) ·
+[OpenShell sandboxes](https://docs.nvidia.com/openshell/v0.0.116/sandboxes/manage-sandboxes) ·
+[OpenShell policy schema](https://docs.nvidia.com/openshell/v0.0.116/reference/policy-schema) ·
 [OpenClaw agent workspace](https://docs.openclaw.ai/concepts/agent-workspace) ·
-[OpenClaw gateway](https://docs.openclaw.ai/gateway/index)
+[OpenClaw gateway](https://docs.openclaw.ai/gateway)
