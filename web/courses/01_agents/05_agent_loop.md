@@ -101,7 +101,7 @@ def parse_tool_request(reply):
 ## 1. A question that needs two steps
 
 ```text
-What year is it, and what is that year multiplied by 3?
+What year is it, and what is that year to the power of 3?
 ```
 
 Answering takes two tools in order: `get_time` to learn the year, then `calculate` with the
