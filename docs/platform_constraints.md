@@ -14,7 +14,7 @@ live product evidence.
 |---|---|---|---|
 | `setup.sh` on Ubuntu 24.04 | Linux host with Docker | NVIDIA API key; network access to `ghcr.io`, `github.com`, and `registry.npmjs.org` | Tests against stand-in tools only; no live run on v0.0.145 |
 | `setup.sh` on Apple Silicon macOS | macOS with Docker Desktop or Colima | The same, plus a Node.js whose npm directories only you can write to | Tests against stand-in tools only; no live run on v0.0.145 |
-| Brev Launchable (`bootstrap.sh` and the site's Setup lesson) | Brev CPU instance | The port `3000` link; an NVIDIA API key entered in the page | Site binding and port handling ran on one test instance against the previous pin; nothing has run on v0.0.145 |
+| Brev Launchable (`bootstrap.sh` and the site's Setup lesson) | Brev CPU instance | The port `3000` link; an NVIDIA API key entered in the page | Site binding and port handling ran on one test instance against the previous pin; nothing has run on v0.0.145. `bootstrap.sh` is exercised against stand-in tools only |
 | Course 1 site lessons (Agents from Scratch) | Any host that runs the site | NVIDIA API key; a Tavily key is optional | Every cell and check runs in the test suite against a stand-in model |
 | Course 2 lesson 1 (From Your Agent to an Agent Harness) | Any host that runs the site | None: a stand-in plays the model | Every cell and the check run in the test suite |
 | Course 2 lessons 2–8 | Host where `setup.sh` has completed | Managed NemoClaw 0.0.145 unit with OpenShell 0.0.116 and a healthy `agent` sandbox | Static, plus graded checks exercised against stand-in CLIs; no live run on v0.0.145 |

@@ -8,12 +8,17 @@
 # prerequisites. This script closes that gap and then hands over to setup.sh:
 #   1. picks the login user and puts the course checkout in that user's home
 #   2. installs uv and the pinned Node.js release if they are missing
-#   3. runs ./setup.sh (NemoClaw install, `agent` sandbox, first inference)
+#   3. prepares the host for NemoClaw: closes a home directory that other users
+#      can write to, and keeps the login user's services running with nobody
+#      logged in (the OpenShell gateway is one of them)
+#   4. runs ./setup.sh (NemoClaw install, `agent` sandbox, first inference)
 #      when NVIDIA_API_KEY was supplied; otherwise learners enter their own
 #      key in the workshop site's Setup lesson
-#   4. registers the course's Python environment as the Jupyter `python3` kernel
-#   5. starts JupyterLab on the course directory, only when CLAW_START_JUPYTER=1
-#   6. starts the workshop site (web/) where the instance's Brev link can reach it
+#   5. starts fetching the two sandbox images in the background, so the Setup
+#      lesson and the first lab sandbox do not wait on the download
+#   6. registers the course's Python environment as the Jupyter `python3` kernel
+#   7. starts JupyterLab on the course directory, only when CLAW_START_JUPYTER=1
+#   8. starts the workshop site (web/) where the instance's Brev link can reach it
 #
 # It makes no assumption about which user Brev runs it as or from which
 # directory: started as root, it re-runs itself as the login user.
@@ -47,6 +52,7 @@
 #   CLAW_WEB_INTERFACE  Network interface that carries Brev's private network (default: wt0).
 #   CLAW_WEB_TOKEN      Optional access code for the workshop site. Needed only if you
 #                       set CLAW_WEB_HOST to an address that is reachable without a login.
+#   CLAW_PREPULL_IMAGES Set to 0 to skip fetching the sandbox images at launch.
 #   CLAW_FORCE_INSTALL, CLAW_SKIP_INFERENCE  Passed through to setup.sh.
 #   NEMOCLAW_DISABLE_TELEMETRY  Set to 1 to stop NemoClaw sending operation telemetry to
 #                       NVIDIA, for the install and for every command learners run
@@ -55,7 +61,7 @@
 
 set -euo pipefail
 
-passthrough_env="CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_INTERFACE,CLAW_WEB_TOKEN,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE,NEMOCLAW_DISABLE_TELEMETRY"
+passthrough_env="CLAW_REPO_URL,CLAW_COURSE_DIR,CLAW_START_JUPYTER,CLAW_JUPYTER_PORT,CLAW_JUPYTER_IP,CLAW_JUPYTER_TOKEN,CLAW_START_WEB,CLAW_WEB_PORT,CLAW_WEB_HOST,CLAW_WEB_INTERFACE,CLAW_WEB_TOKEN,CLAW_PREPULL_IMAGES,CLAW_FORCE_INSTALL,CLAW_SKIP_INFERENCE,NEMOCLAW_DISABLE_TELEMETRY"
 
 step() { printf '\n==> %s\n' "$1"; }
 ok() { printf '    OK: %s\n' "$1"; }
@@ -225,18 +231,30 @@ choose_web_host() {
     web_host="${CLAW_WEB_HOST}"
     return
   fi
-  local interface="${CLAW_WEB_INTERFACE:-wt0}" private_address=""
+  local interface="${CLAW_WEB_INTERFACE:-wt0}" private_address="" attempt
   if command -v ip >/dev/null 2>&1; then
-    private_address="$(ip -4 -o addr show dev "${interface}" 2>/dev/null |
-      awk '{ print $4 }' | cut -d/ -f1 | head -n 1)"
+    # Brev's private network can come up after this script starts, so give it a
+    # minute. `ip` fails for an interface that does not exist yet. This script runs
+    # with errexit and pipefail, where that failure would end it here without a word,
+    # so the status is ignored.
+    for attempt in $(seq 1 30); do
+      private_address="$(ip -4 -o addr show dev "${interface}" 2>/dev/null |
+        awk '{ print $4 }' | cut -d/ -f1 | head -n 1 || true)"
+      if [[ -n "${private_address}" ]]; then break; fi
+      if [[ "${attempt}" -eq 1 ]]; then
+        printf '    waiting up to a minute for an address on the %s interface\n' "${interface}"
+      fi
+      sleep 2
+    done
   fi
   if [[ -n "${private_address}" ]]; then
     web_host="127.0.0.1,${private_address}"
     web_behind_login=1
   else
     web_host="127.0.0.1"
-    printf '    NOTE: no %s interface found, so the site listens on loopback only and a\n' "${interface}"
-    printf '          Brev link cannot reach it. Re-run with --web-only once it is up.\n'
+    printf '    NOTE: no address on the %s interface, so the site listens on loopback only and a\n' "${interface}"
+    printf '          Brev link cannot reach it. Once the interface is up, stop the site and run this\n'
+    printf '          script with --web-only (see "After deploying" in launchable/README.md).\n'
   fi
 }
 
@@ -291,10 +309,39 @@ step "Installing host tools"
 for tool in curl git docker tar; do
   command -v "${tool}" >/dev/null 2>&1 || fail "${tool} is not installed on this VM."
 done
-# The NemoClaw installer uses `strings` (binutils) to verify what it downloads.
+
+# Install one apt package without a prompt. A fresh VM may have no package lists yet,
+# and its first boot can hold the apt lock for a while, so refresh the lists first and
+# try three times. Returns non-zero when there is no apt, when sudo would ask for a
+# password, or when the install keeps failing.
+apt_install() {
+  local package="$1" attempt
+  command -v apt-get >/dev/null 2>&1 || return 1
+  sudo -n true 2>/dev/null || return 1
+  for attempt in 1 2 3; do
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get update </dev/null >/dev/null 2>&1 || true
+    if sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      -o DPkg::Lock::Timeout=60 "${package}" </dev/null >/dev/null 2>&1; then
+      return 0
+    fi
+    if [[ "${attempt}" -lt 3 ]]; then sleep 10; fi
+  done
+  return 1
+}
+
+# The NemoClaw installer uses `strings` (binutils) to verify what it downloads, and
+# stops without it.
 if ! command -v strings >/dev/null 2>&1; then
-  sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y binutils </dev/null >/dev/null 2>&1 ||
+  apt_install binutils || true
+  command -v strings >/dev/null 2>&1 ||
     printf '    WARNING: strings (binutils) is missing and could not be installed; setup will ask for it.\n'
+fi
+# OpenShell copies files into a sandbox through this machine's ssh client. The last two
+# Course 2 lessons deploy their agents that way.
+if ! command -v ssh >/dev/null 2>&1; then
+  apt_install openssh-client || true
+  command -v ssh >/dev/null 2>&1 ||
+    printf '    WARNING: ssh is missing and could not be installed; the lessons that deploy an agent into the sandbox need it.\n'
 fi
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -334,6 +381,9 @@ if ! node_is_new_enough; then
   node_name="node-v${node_pinned}-linux-${node_arch}"
   node_prefix="${HOME}/.local/${node_name}"
   if [[ ! -x "${node_prefix}/bin/node" ]]; then
+    # The archive is a .tar.xz, which tar unpacks with xz.
+    command -v xz >/dev/null 2>&1 || apt_install xz-utils ||
+      fail "xz is not installed and could not be installed with apt. It is needed to unpack Node.js."
     node_tar="$(mktemp)"
     curl -fsSL "https://nodejs.org/dist/v${node_pinned}/${node_name}.tar.xz" -o "${node_tar}"
     mkdir -p "${HOME}/.local"
@@ -350,6 +400,71 @@ if ! node_is_new_enough; then
   node_is_new_enough || fail "Node.js is still older than ${node_min} after installing ${node_pinned}."
 fi
 ok "node $(node --version)"
+
+# --------------------------------------------------------------------------
+# What NemoClaw needs from the host before it is installed
+# --------------------------------------------------------------------------
+step "Preparing the host for NemoClaw"
+
+# The NemoClaw installer refuses to install below a directory that group or others can
+# write to, and it checks the home directory too. setup.sh tightens the folders under
+# the home directory and leaves the home directory itself alone, because it also runs
+# on a learner's own machine. This VM exists for the course, so close it here. A home
+# directory that is a symbolic link, or that belongs to someone else, is left as it
+# is: chmod cannot make the installer accept those, and setup.sh names them.
+home_dir="${HOME%/}"
+home_mode="$(stat -c '%a' -- "${home_dir}" 2>/dev/null || stat -f '%Lp' "${home_dir}" 2>/dev/null || true)"
+if [[ -d "${home_dir}" && ! -L "${home_dir}" && -O "${home_dir}" && "${home_mode}" =~ ^[0-7]{3,4}$ ]]; then
+  if ((8#${home_mode} & 022)); then
+    if chmod go-w "${home_dir}"; then
+      ok "removed group and world write access from ${home_dir} (it was mode ${home_mode})"
+    else
+      printf '    WARNING: could not change the mode of %s; setup will stop and name it.\n' "${home_dir}"
+    fi
+  else
+    ok "${home_dir} is mode ${home_mode}; group and others cannot write to it"
+  fi
+else
+  printf '    WARNING: left %s as it is: it is a symbolic link, belongs to another user, or its mode could not be read.\n' "${HOME}"
+fi
+
+# setup.sh stops at its own Docker check when this user cannot reach the daemon, and a
+# lesson cell has no sudo to fix that with. Say so here, where a deployer looks.
+docker_answers=0
+if docker info >/dev/null 2>&1; then
+  docker_answers=1
+  ok "Docker answers for $(id -un)"
+else
+  printf '    WARNING: Docker does not answer for %s. The Setup lesson stops at its Docker check until it does.\n' "$(id -un)"
+fi
+
+# NemoClaw runs the OpenShell gateway as a service of this user whenever the user's
+# service manager is running, and it never turns lingering on. Without lingering that
+# manager stops when the user's last login session ends and takes the gateway with it,
+# and NemoClaw then refuses to start a gateway any other way. Learners use the site, so
+# nobody stays logged in. OpenShell's documentation gives this command for keeping the
+# service running after logout. It comes before setup, so the gateway is started the
+# same way whether setup runs below or later from the site.
+if [[ "$(uname -s)" == "Linux" ]]; then
+  login_user="$(id -un)"
+  if command -v loginctl >/dev/null 2>&1 &&
+    { sudo -n loginctl enable-linger "${login_user}" </dev/null >/dev/null 2>&1 ||
+      loginctl --no-ask-password enable-linger "${login_user}" </dev/null >/dev/null 2>&1; }; then
+    # The service manager starts in the background. NemoClaw looks for its bus here.
+    user_bus="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus"
+    for _ in $(seq 1 15); do
+      if [[ -S "${user_bus}" ]]; then break; fi
+      sleep 1
+    done
+    if [[ -S "${user_bus}" ]]; then
+      ok "${login_user} keeps its services running with nobody logged in (lingering is on)"
+    else
+      printf '    WARNING: lingering is on for %s, but its service manager did not start within 15 seconds.\n' "${login_user}"
+    fi
+  else
+    printf '    WARNING: could not turn on lingering for %s; the OpenShell gateway may stop when nobody is logged in.\n' "${login_user}"
+  fi
+fi
 
 # --------------------------------------------------------------------------
 # The course's own setup: NemoClaw, the `agent` sandbox, first inference
@@ -369,13 +484,73 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# Sandbox images, fetched ahead of the lessons that need them
+# --------------------------------------------------------------------------
+# Onboarding runs the `agent` sandbox from the first image, and OpenShell starts every
+# sandbox a lesson creates with `claw sandbox-create` from the second. Each is more than
+# a gigabyte to download, and `claw sandbox-create` gives up after three minutes. Fetch
+# both now, in the background and detached like the site, so the pull outlives this
+# script. Neither needs a key. A pull that fails costs only the time it would have
+# saved: onboarding and OpenShell fetch whatever is missing.
+image_pull_log="${HOME}/claw-image-pull.log"
+image_pull_started=0
+
+prepull_images() {
+  local nemoclaw_tag
+  local -a images=()
+  step "Fetching the sandbox images in the background"
+  if [[ "${docker_answers}" != "1" ]]; then
+    printf '    WARNING: skipped, because Docker does not answer for %s.\n' "$(id -un)"
+    return 0
+  fi
+  # The onboarding image is published under the NemoClaw release tag.
+  nemoclaw_tag="$(
+    uv run --quiet python -c \
+      'import yaml; print(yaml.safe_load(open("versions.yaml", encoding="utf-8"))["cli_tools"]["nemoclaw"]["install_tag"])' \
+      2>/dev/null || true
+  )"
+  if [[ "${nemoclaw_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    images+=("ghcr.io/nvidia/nemoclaw/openclaw-sandbox:${nemoclaw_tag}")
+  else
+    printf '    WARNING: versions.yaml has no NemoClaw release tag; not fetching the onboarding image.\n'
+  fi
+  # OpenShell's default sandbox image. It has no versioned tag.
+  images+=("ghcr.io/nvidia/openshell-community/sandboxes/base:latest")
+
+  # The pull outlives this script and runs beside the site, whose cells run as the same
+  # user and could read its environment. So it starts without the key, as the site does.
+  # shellcheck disable=SC2016  # the loop's variables expand in the detached shell
+  env -u NVIDIA_API_KEY setsid nohup bash -c '
+    for image in "$@"; do
+      printf "%s  pulling  %s\n" "$(date -u +%H:%M:%S)" "${image}"
+      if docker pull --quiet "${image}" >/dev/null; then
+        printf "%s  done     %s\n" "$(date -u +%H:%M:%S)" "${image}"
+      else
+        printf "%s  WARNING: could not pull %s\n" "$(date -u +%H:%M:%S)" "${image}"
+      fi
+    done
+    printf "%s  finished\n" "$(date -u +%H:%M:%S)"
+  ' claw-image-pull "${images[@]}" >"${image_pull_log}" 2>&1 </dev/null &
+  image_pull_started=1
+  ok "pulling ${#images[@]} images; progress is in ${image_pull_log}"
+}
+
+if [[ "${CLAW_PREPULL_IMAGES:-1}" == "1" ]]; then
+  prepull_images
+fi
+
+# --------------------------------------------------------------------------
 # Jupyter
 # --------------------------------------------------------------------------
 step "Registering the course environment as the Jupyter python3 kernel"
 # A user-level `python3` kernelspec takes precedence over a system one, so the
-# notebooks find the course's packages in any JupyterLab this user runs.
-uv run --quiet python -m ipykernel install --user --name python3 --display-name "claw-training-course" >/dev/null
-ok "kernel registered"
+# notebooks find the course's packages in any JupyterLab this user runs. The site
+# does not use it, so a failure here must not stop the site from starting.
+if uv run --quiet python -m ipykernel install --user --name python3 --display-name "claw-training-course" >/dev/null; then
+  ok "kernel registered"
+else
+  printf '    WARNING: could not register the Jupyter kernel; the workshop site does not need it.\n'
+fi
 
 if [[ "${CLAW_START_JUPYTER:-0}" == "1" ]]; then
   start_jupyter
@@ -390,6 +565,11 @@ cat <<EOF
 Launchable bootstrap complete.
 
   Course directory: ${course_dir}
+EOF
+if [[ "${image_pull_started}" == "1" ]]; then
+  printf '  Sandbox images:   downloading in the background; progress is in %s\n' "${image_pull_log}"
+fi
+cat <<EOF
 
 Open the workshop site through the instance's HTTP port ${web_port} link. Brev asks you to
 sign in; the site itself asks for nothing.

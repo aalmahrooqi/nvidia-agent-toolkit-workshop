@@ -110,6 +110,11 @@ def test_bootstrap_keeps_the_api_key_out_of_jupyter_and_off_disk():
     script = (REPO_ROOT / "launchable" / "bootstrap.sh").read_text(encoding="utf-8")
     assert "env -u NVIDIA_API_KEY setsid nohup uv run jupyter lab" in script
     assert ".env" not in script
+    # Every process that outlives the script starts without the key: learners' cells run
+    # as the same user and could read it from that process's environment.
+    detached = [line for line in script.splitlines() if "setsid nohup" in line]
+    assert len(detached) == 3
+    assert all("env -u NVIDIA_API_KEY setsid nohup" in line for line in detached)
     # A non-loopback bind without a token must be refused, not started.
     assert "set CLAW_JUPYTER_TOKEN before exposing JupyterLab" in script
 
@@ -151,6 +156,42 @@ def test_bootstrap_serves_the_site_on_the_private_network_only():
     # No access code is generated, stored, or printed.
     assert "claw-web-token" not in script
     assert not re.search(r"(echo|ok|step|printf)[^\n]*\$\{?CLAW_WEB_TOKEN", script)
+
+
+def test_bootstrap_prepares_the_host_before_setup_and_fetches_images_after():
+    script = (REPO_ROOT / "launchable" / "bootstrap.sh").read_text(encoding="utf-8")
+    before_modes, full_run = script.split('case "${1:-}" in')
+    home = full_run.index('chmod go-w "${home_dir}"')
+    linger = full_run.index("loginctl enable-linger")
+    setup = full_run.index("./setup.sh ||")
+    pull = full_run.index("\n  prepull_images\n")
+    site = full_run.index("\n  start_web\n")
+    # setup.sh may run at launch. The installer it starts needs the closed home
+    # directory, and the gateway it starts needs the user's service manager.
+    assert home < setup and linger < setup
+    # The pull starts after a launch-time setup, so it does not compete with onboarding.
+    assert setup < pull < site
+    # Nothing on the host changes on a --web-only or --jupyter-only restart, and never
+    # as root on root's own home: both paths leave the script before this part.
+    for change in ("chmod go-w", "enable-linger", "docker pull", "apt-get"):
+        assert change not in before_modes, change
+    assert "sudo chmod" not in script and "chmod -R" not in script
+    passthrough = re.search(r'^passthrough_env="([^"]+)"', script, re.MULTILINE).group(1)
+    assert "CLAW_PREPULL_IMAGES" in passthrough.split(",")
+
+
+def test_bootstrap_never_waits_for_a_password():
+    script = (REPO_ROOT / "launchable" / "bootstrap.sh").read_text(encoding="utf-8")
+    full_run = script.split('case "${1:-}" in')[1]
+    # Nothing can answer a prompt at launch, so every sudo there fails instead of asking.
+    for line in full_run.splitlines():
+        code = line.split("#")[0]
+        if re.search(r"\bsudo\b", code) and "printf" not in code:
+            assert "sudo -n " in code, line
+    apt = script[script.index("apt_install() {") : script.index("# The NemoClaw installer uses")]
+    # A fresh VM may have no package lists, so they are refreshed before the install.
+    assert apt.index("apt-get update") < apt.index("apt-get install -y")
+    assert "loginctl --no-ask-password enable-linger" in full_run
 
 
 def test_bootstrap_installs_the_course_outside_a_temporary_clone():

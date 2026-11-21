@@ -153,8 +153,8 @@ To hand learners a one-click environment instead, publish the course as a
 [Brev Launchable](https://docs.nvidia.com/brev/concepts/launchables).
 [`launchable/README.md`](launchable/README.md) lists the builder settings, and
 [`launchable/bootstrap.sh`](launchable/bootstrap.sh) is the setup script it runs: it installs the
-prerequisites a fresh Brev VM lacks, calls `setup.sh` when a key was supplied at launch, and
-starts the workshop site.
+prerequisites a fresh Brev VM lacks, prepares the host for NemoClaw, calls `setup.sh` when a key
+was supplied at launch, starts fetching the sandbox images, and starts the workshop site.
 
 ## What Changed From the Full Course
 
